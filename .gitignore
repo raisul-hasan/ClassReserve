@@ -1,0 +1,7 @@
+vendor/
+node_modules/
+.env
+.vscode/
+*.log
+/.idea/
+config.php
