@@ -4,7 +4,19 @@ require_once __DIR__ . '/db.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
-    $stmt = $pdo->query('SELECT * FROM rooms ORDER BY name');
+    // support optional filters: capacity_min, capacity_max, type, building, q (search name)
+    $sql = 'SELECT * FROM rooms';
+    $where = [];
+    $params = [];
+    if (isset($_GET['capacity_min'])) { $where[] = 'capacity >= ?'; $params[] = (int)$_GET['capacity_min']; }
+    if (isset($_GET['capacity_max'])) { $where[] = 'capacity <= ?'; $params[] = (int)$_GET['capacity_max']; }
+    if (!empty($_GET['type'])) { $where[] = 'type = ?'; $params[] = $_GET['type']; }
+    if (!empty($_GET['building'])) { $where[] = 'building = ?'; $params[] = $_GET['building']; }
+    if (!empty($_GET['q'])) { $where[] = 'name LIKE ?'; $params[] = '%' . $_GET['q'] . '%'; }
+    if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
+    $sql .= ' ORDER BY name';
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     $rooms = $stmt->fetchAll();
     echo json_encode($rooms);
     exit;
