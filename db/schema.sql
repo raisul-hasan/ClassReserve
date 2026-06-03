@@ -42,3 +42,11 @@ CREATE TABLE IF NOT EXISTS maintenance (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE CASCADE
 );
+
+-- Demo login accounts for local testing.
+-- Password for all demo accounts: ClassReserve123!
+INSERT IGNORE INTO users (id, name, email, password_hash, role) VALUES
+(1, 'System Admin', 'admin@classreserve.test', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'admin'),
+(2, 'Dr. Sarah Johnson', 'sarah.johnson@classreserve.test', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'faculty'),
+(3, 'Prof. David Lee', 'david.lee@classreserve.test', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'faculty'),
+(4, 'Dr. Maria Garcia', 'maria.garcia@classreserve.test', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'faculty');

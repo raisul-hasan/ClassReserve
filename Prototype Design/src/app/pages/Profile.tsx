@@ -1,162 +1,191 @@
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { User, Mail, Phone, Building2 } from "lucide-react";
+import { useState } from "react";
+import { Mail, Building2, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+function getInitials(name: string) {
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function getRoleLabel(role?: string) {
+  if (role === "admin") return "Administrator";
+  if (role === "faculty") return "Faculty";
+  return "Student";
+}
 
 export function Profile() {
+  const { user } = useAuth();
+  const [pwOpen, setPwOpen] = useState(false);
+  const [firstName, setFirstName] = useState(user?.name?.split(" ")[0] || "");
+  const [lastName, setLastName] = useState(user?.name?.split(" ").slice(1).join(" ") || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [department, setDepartment] = useState("Computer Science");
+  const [studentId, setStudentId] = useState("CS-2024-0042");
+
+  const inputCls =
+    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Profile</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Manage your account information
-        </p>
+    <div className="space-y-0 max-w-2xl" style={DM_SANS}>
+      {/* Header Banner */}
+      <div
+        className="rounded-t-2xl p-8 flex flex-col items-center gap-3"
+        style={{
+          background: "linear-gradient(135deg, #210706 0%, #3d0e0b 50%, #210706 100%)",
+        }}
+      >
+        <div
+          className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+          style={{ background: "#891D1A", boxShadow: "0 0 0 4px rgba(137,29,26,0.3)" }}
+        >
+          {getInitials(user?.name || "U")}
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl text-white" style={{ ...PLAYFAIR, fontWeight: 600 }}>
+            {user?.name || "User"}
+          </h2>
+          <span
+            className="inline-block text-xs px-3 py-1 rounded-full mt-1 font-medium"
+            style={{ background: "#5E657B", color: "#F1E6D2" }}
+          >
+            {getRoleLabel(user?.role)}
+          </span>
+        </div>
       </div>
 
-      {/* Profile Header */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-6">
-            <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
-              <User className="w-10 h-10 text-white" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Admin User</h2>
-              <p className="text-gray-500 dark:text-gray-400">System Administrator</p>
-              <Button variant="outline" className="mt-3 rounded-xl dark:border-gray-700 dark:text-gray-300">
-                Change Photo
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Main card */}
+      <div className="bg-card rounded-b-2xl shadow-sm overflow-hidden">
+        <div className="px-6 pt-6 pb-5 border-b border-border">
+          <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
+            Personal Information
+          </h3>
+        </div>
 
-      {/* Personal Information */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardHeader>
-          <CardTitle className="dark:text-white">Personal Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName" className="dark:text-gray-300">First Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  defaultValue="Admin"
-                />
-              </div>
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>First Name</label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                className={inputCls}
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName" className="dark:text-gray-300">Last Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="lastName"
-                  placeholder="Doe"
-                  className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  defaultValue="User"
-                />
-              </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Last Name</label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className={inputCls}
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+              />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email" className="dark:text-gray-300">Email Address</Label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Email Address</label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="email"
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
+              <input
                 type="email"
-                placeholder="admin@university.edu"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="admin@university.edu"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputCls + " pl-9"}
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="phone" className="dark:text-gray-300">Phone Number</Label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Department</label>
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="+1 (555) 123-4567"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="+1 (555) 123-4567"
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
+              <input
+                type="text"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className={inputCls + " pl-9"}
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="department" className="dark:text-gray-300">Department</Label>
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="department"
-                placeholder="Administration"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="Administration"
-              />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              {user?.role === "faculty" ? "Faculty ID" : "Student ID"}
+            </label>
+            <input
+              type="text"
+              value={studentId}
+              onChange={(e) => setStudentId(e.target.value)}
+              className={inputCls}
+              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+            />
+          </div>
+
+          <button
+            className="w-full py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors"
+            style={{ background: "#891D1A" }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+            onClick={() => alert("Profile saved.")}
+          >
+            <Save className="w-4 h-4" />
+            Save Changes
+          </button>
+        </div>
+
+        {/* Password section (collapsible) */}
+        <div className="border-t border-border">
+          <button
+            onClick={() => setPwOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#891D1A]/5 transition-colors"
+          >
+            <span className="text-sm font-semibold" style={{ color: "#891D1A" }}>
+              Change Password
+            </span>
+            {pwOpen ? (
+              <ChevronUp className="w-4 h-4" style={{ color: "#891D1A" }} />
+            ) : (
+              <ChevronDown className="w-4 h-4" style={{ color: "#891D1A" }} />
+            )}
+          </button>
+
+          {pwOpen && (
+            <div className="px-6 pb-5 space-y-4">
+              {["Current Password", "New Password", "Confirm New Password"].map((label) => (
+                <div key={label} className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>{label}</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    className={inputCls}
+                    style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                  />
+                </div>
+              ))}
+              <button
+                className="w-full py-2.5 rounded-lg text-sm font-medium border transition-colors"
+                style={{ borderColor: "#891D1A", color: "#891D1A" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(137,29,26,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+                onClick={() => alert("Password updated.")}
+              >
+                Update Password
+              </button>
             </div>
-          </div>
-
-          <div className="pt-4">
-            <Button className="bg-blue-600 hover:bg-blue-700 rounded-xl">
-              Save Changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Security Settings */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardHeader>
-          <CardTitle className="dark:text-white">Security</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password" className="dark:text-gray-300">Current Password</Label>
-            <Input
-              id="current-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="new-password" className="dark:text-gray-300">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password" className="dark:text-gray-300">Confirm New Password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="pt-4">
-            <Button variant="outline" className="rounded-xl dark:border-gray-700 dark:text-gray-300">
-              Update Password
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

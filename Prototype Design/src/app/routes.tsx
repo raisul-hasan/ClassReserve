@@ -12,6 +12,10 @@ import { Notifications } from "./pages/Notifications";
 import { AdminSettings } from "./pages/AdminSettings";
 import { Profile } from "./pages/Profile";
 import { NewBooking } from "./pages/NewBooking";
+import { RoomDetail } from "./pages/RoomDetail";
+import { BookingConfirmation } from "./pages/BookingConfirmation";
+import { Forum } from "./pages/Forum";
+import { IssueReports } from "./pages/IssueReports";
 
 export const router = createBrowserRouter([
   {
@@ -28,11 +32,30 @@ export const router = createBrowserRouter([
     children: [
       { index: true, Component: StudentDashboard },
       { path: "rooms", Component: Rooms },
+      { path: "rooms/:roomName", Component: RoomDetail },
       { path: "bookings", Component: Bookings },
       { path: "calendar", Component: Calendar },
       { path: "notifications", Component: Notifications },
       { path: "profile", Component: Profile },
       { path: "new-booking", Component: NewBooking },
+      { path: "booking-confirmation", Component: BookingConfirmation },
+      { path: "forum", Component: Forum },
+    ],
+  },
+  {
+    path: "/club",
+    Component: Layout,
+    children: [
+      { index: true, Component: StudentDashboard },
+      { path: "rooms", Component: Rooms },
+      { path: "rooms/:roomName", Component: RoomDetail },
+      { path: "bookings", Component: Bookings },
+      { path: "calendar", Component: Calendar },
+      { path: "notifications", Component: Notifications },
+      { path: "profile", Component: Profile },
+      { path: "new-booking", Component: NewBooking },
+      { path: "booking-confirmation", Component: BookingConfirmation },
+      { path: "forum", Component: Forum },
     ],
   },
   {
@@ -42,11 +65,14 @@ export const router = createBrowserRouter([
       { index: true, Component: FacultyDashboard },
       { path: "calendar", Component: Calendar },
       { path: "rooms", Component: Rooms },
+      { path: "rooms/:roomName", Component: RoomDetail },
       { path: "bookings", Component: Bookings },
       { path: "approvals", Component: Approvals },
       { path: "notifications", Component: Notifications },
       { path: "profile", Component: Profile },
       { path: "new-booking", Component: NewBooking },
+      { path: "booking-confirmation", Component: BookingConfirmation },
+      { path: "forum", Component: Forum },
     ],
   },
   {
@@ -56,12 +82,15 @@ export const router = createBrowserRouter([
       { index: true, Component: Dashboard },
       { path: "calendar", Component: Calendar },
       { path: "rooms", Component: Rooms },
+      { path: "rooms/:roomName", Component: RoomDetail },
       { path: "bookings", Component: Bookings },
       { path: "approvals", Component: Approvals },
       { path: "notifications", Component: Notifications },
       { path: "settings", Component: AdminSettings },
       { path: "profile", Component: Profile },
       { path: "new-booking", Component: NewBooking },
+      { path: "booking-confirmation", Component: BookingConfirmation },
+      { path: "issue-reports", Component: IssueReports },
     ],
   },
 ]);

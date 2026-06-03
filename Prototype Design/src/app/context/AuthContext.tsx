@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState } from 'react';
 
-type UserRole = 'student' | 'faculty' | 'admin';
+export type UserRole = 'student' | 'club' | 'faculty' | 'admin';
 
-interface User {
+export interface User {
   name: string;
   email: string;
   role: UserRole;
@@ -30,7 +30,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           ? 'System Admin'
           : role === 'faculty'
             ? 'Dr. Sarah Johnson'
-            : 'Michael Chen',
+            : role === 'club'
+              ? 'Computing Club'
+              : 'Michael Chen',
       email,
       role,
     };

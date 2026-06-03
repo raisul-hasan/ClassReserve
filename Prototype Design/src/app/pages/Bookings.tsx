@@ -1,199 +1,188 @@
-import { Card, CardContent } from "../components/ui/card";
-import { Badge } from "../components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/ui/table";
-import { Clock } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Clock, BookOpen, Shield, FileText } from "lucide-react";
+
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+type Status = "approved" | "pending" | "rejected" | "cancelled";
+type RoleType = "Faculty" | "Club" | "Student";
 
 const bookings = [
-  {
-    id: 1,
-    eventName: 'Math 101 Lecture',
-    userRole: 'Faculty',
-    user: 'Dr. Sarah Johnson',
-    room: 'Room A-301',
-    date: 'Apr 1, 2026',
-    time: '10:00 AM - 12:00 PM',
-    status: 'approved',
-  },
-  {
-    id: 2,
-    eventName: 'Engineering Club Meeting',
-    userRole: 'Club',
-    user: 'Engineering Club',
-    room: 'Room B-205',
-    date: 'Apr 1, 2026',
-    time: '2:00 PM - 4:00 PM',
-    status: 'approved',
-  },
-  {
-    id: 3,
-    eventName: 'Study Group Session',
-    userRole: 'Student',
-    user: 'Michael Chen',
-    room: 'Lab C-105',
-    date: 'Apr 2, 2026',
-    time: '3:00 PM - 5:00 PM',
-    status: 'pending',
-  },
-  {
-    id: 4,
-    eventName: 'Physics Lab',
-    userRole: 'Faculty',
-    user: 'Prof. David Lee',
-    room: 'Lab C-106',
-    date: 'Apr 2, 2026',
-    time: '9:00 AM - 12:00 PM',
-    status: 'approved',
-  },
-  {
-    id: 5,
-    eventName: 'Project Presentation',
-    userRole: 'Student',
-    user: 'Emma Wilson',
-    room: 'Room D-202',
-    date: 'Apr 3, 2026',
-    time: '1:00 PM - 2:00 PM',
-    status: 'rejected',
-  },
-  {
-    id: 6,
-    eventName: 'Guest Lecture Series',
-    userRole: 'Faculty',
-    user: 'Dr. Maria Garcia',
-    room: 'Auditorium B',
-    date: 'Apr 4, 2026',
-    time: '2:00 PM - 5:00 PM',
-    status: 'approved',
-  },
-  {
-    id: 7,
-    eventName: 'Dance Club Practice',
-    userRole: 'Club',
-    user: 'Dance Club',
-    room: 'Room E-101',
-    date: 'Apr 5, 2026',
-    time: '4:00 PM - 6:00 PM',
-    status: 'pending',
-  },
-  {
-    id: 8,
-    eventName: 'Tutorial Session',
-    userRole: 'Student',
-    user: 'James Brown',
-    room: 'Room A-302',
-    date: 'Apr 5, 2026',
-    time: '10:00 AM - 11:00 AM',
-    status: 'approved',
-  },
+  { id: 1, eventName: "Math 101 Lecture", userRole: "Faculty" as RoleType, user: "Dr. Sarah Johnson", room: "Room A-301", building: "Building A", date: "Apr 1, 2026", time: "10:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
+  { id: 2, eventName: "Engineering Club Meeting", userRole: "Club" as RoleType, user: "Engineering Club", room: "Room B-205", building: "Building B", date: "Apr 1, 2026", time: "2:00 PM – 4:00 PM", status: "approved" as Status, hasDoc: false },
+  { id: 3, eventName: "Study Group Session", userRole: "Student" as RoleType, user: "Michael Chen", room: "Lab C-105", building: "Building C", date: "Apr 2, 2026", time: "3:00 PM – 5:00 PM", status: "pending" as Status, hasDoc: false },
+  { id: 4, eventName: "Physics Lab", userRole: "Faculty" as RoleType, user: "Prof. David Lee", room: "Lab C-106", building: "Building C", date: "Apr 2, 2026", time: "9:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
+  { id: 5, eventName: "Project Presentation", userRole: "Student" as RoleType, user: "Emma Wilson", room: "Room D-202", building: "Building D", date: "Apr 3, 2026", time: "1:00 PM – 2:00 PM", status: "rejected" as Status, hasDoc: false },
+  { id: 6, eventName: "Guest Lecture Series", userRole: "Faculty" as RoleType, user: "Dr. Maria Garcia", room: "Auditorium B", building: "Building B", date: "Apr 4, 2026", time: "2:00 PM – 5:00 PM", status: "approved" as Status, hasDoc: true },
+  { id: 7, eventName: "Dance Club Practice", userRole: "Club" as RoleType, user: "Dance Club", room: "Room E-101", building: "Building E", date: "Apr 5, 2026", time: "4:00 PM – 6:00 PM", status: "pending" as Status, hasDoc: false },
+  { id: 8, eventName: "Tutorial Session", userRole: "Student" as RoleType, user: "James Brown", room: "Room A-302", building: "Building A", date: "Apr 5, 2026", time: "10:00 AM – 11:00 AM", status: "cancelled" as Status, hasDoc: false },
+];
+
+function statusStyle(s: Status) {
+  switch (s) {
+    case "approved": return { bg: "#3B6E4A", label: "Approved" };
+    case "pending": return { bg: "#B8860B", label: "Pending" };
+    case "rejected": return { bg: "#891D1A", label: "Rejected" };
+    case "cancelled": return { bg: "#5E657B", label: "Cancelled" };
+  }
+}
+
+function roleStyle(r: RoleType) {
+  switch (r) {
+    case "Faculty": return { bg: "rgba(137,29,26,0.1)", color: "#891D1A" };
+    case "Club": return { bg: "rgba(94,101,123,0.1)", color: "#5E657B" };
+    case "Student": return { bg: "rgba(184,134,11,0.1)", color: "#B8860B" };
+  }
+}
+
+function priorityForRole(r: RoleType): { label: string; color: string } {
+  switch (r) {
+    case "Faculty": return { label: "HIGH", color: "#891D1A" };
+    case "Club": return { label: "MEDIUM", color: "#5E657B" };
+    case "Student": return { label: "STANDARD", color: "#B8860B" };
+  }
+}
+
+type Tab = "all" | Status;
+const tabs: { key: Tab; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
+  { key: "rejected", label: "Rejected" },
+  { key: "cancelled", label: "Cancelled" },
 ];
 
 export function Bookings() {
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case 'Faculty':
-        return (
-          <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
-            Faculty
-          </Badge>
-        );
-      case 'Club':
-        return (
-          <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-            Club
-          </Badge>
-        );
-      case 'Student':
-        return (
-          <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-            Student
-          </Badge>
-        );
-      default:
-        return null;
-    }
-  };
+  const [activeTab, setActiveTab] = useState<Tab>("all");
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return (
-          <Badge className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950">
-            Approved
-          </Badge>
-        );
-      case 'pending':
-        return (
-          <Badge className="bg-yellow-100 dark:bg-yellow-950 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-100 dark:hover:bg-yellow-950">
-            Pending
-          </Badge>
-        );
-      case 'rejected':
-        return (
-          <Badge className="bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950">
-            Rejected
-          </Badge>
-        );
-      default:
-        return null;
-    }
-  };
+  const filtered = useMemo(() => {
+    if (activeTab === "all") return bookings;
+    return bookings.filter((b) => b.status === activeTab);
+  }, [activeTab]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5" style={DM_SANS}>
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Bookings</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          View all room booking requests and their status
+        <h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">
+          Bookings
+        </h1>
+        <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
+          All room booking requests and their current status
         </p>
       </div>
 
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-gray-200 dark:border-gray-800">
-                <TableHead className="dark:text-gray-400">Event Name</TableHead>
-                <TableHead className="dark:text-gray-400">User / Role</TableHead>
-                <TableHead className="dark:text-gray-400">Room</TableHead>
-                <TableHead className="dark:text-gray-400">Time</TableHead>
-                <TableHead className="dark:text-gray-400">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {bookings.map((booking) => (
-                <TableRow key={booking.id} className="border-gray-200 dark:border-gray-800">
-                  <TableCell className="font-medium text-gray-900 dark:text-white">
-                    {booking.eventName}
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="text-gray-900 dark:text-white">{booking.user}</p>
-                      {getRoleBadge(booking.userRole)}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-gray-700 dark:text-gray-300">{booking.room}</TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <p className="text-gray-900 dark:text-white">{booking.date}</p>
-                      <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
-                        <Clock className="w-3 h-3" />
-                        {booking.time}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(booking.status)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Tab bar */}
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden">
+        <div className="flex border-b border-border px-4">
+          {tabs.map((tab) => {
+            const count = tab.key === "all" ? bookings.length : bookings.filter((b) => b.status === tab.key).length;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className="px-4 py-3 text-sm border-b-2 transition-colors flex items-center gap-1.5"
+                style={
+                  activeTab === tab.key
+                    ? { color: "#891D1A", borderColor: "#891D1A" }
+                    : { color: "#5E657B", borderColor: "transparent" }
+                }
+              >
+                {tab.label}
+                <span
+                  className="text-xs px-1.5 py-0.5 rounded-full"
+                  style={
+                    activeTab === tab.key
+                      ? { background: "rgba(137,29,26,0.1)", color: "#891D1A" }
+                      : { background: "rgba(94,101,123,0.1)", color: "#5E657B" }
+                  }
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="p-4 space-y-3">
+          {filtered.length === 0 && (
+            <div className="py-10 text-center">
+              <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
+              <p className="text-sm" style={{ color: "#5E657B" }}>No bookings found.</p>
+            </div>
+          )}
+
+          {filtered.map((b) => {
+            const ss = statusStyle(b.status);
+            const rs = roleStyle(b.userRole);
+            const priority = priorityForRole(b.userRole);
+            return (
+              <div
+                key={b.id}
+                className="flex items-start gap-3 rounded-xl p-4 bg-background"
+                style={{ borderLeft: `3px solid ${ss.bg}` }}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>
+                      {b.eventName}
+                    </p>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded-full font-medium"
+                      style={{ background: rs.bg, color: rs.color }}
+                    >
+                      {b.userRole}
+                    </span>
+                    {/* Priority badge */}
+                    <span
+                      className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-semibold"
+                      style={{ background: priority.color + "15", color: priority.color }}
+                    >
+                      <Shield className="w-3 h-3" />
+                      {priority.label}
+                    </span>
+                    {/* Document indicator */}
+                    {b.hasDoc && (
+                      <span
+                        className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: "rgba(94,101,123,0.1)", color: "#5E657B" }}
+                      >
+                        <FileText className="w-3 h-3" />
+                        Doc
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>
+                    {b.user} · {b.room}, {b.building}
+                  </p>
+                  <div className="flex items-center gap-1 mt-0.5 text-xs" style={{ color: "#5E657B" }}>
+                    <Clock className="w-3 h-3" />
+                    {b.date} · {b.time}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0 pt-0.5">
+                  <span
+                    className="text-xs px-2.5 py-1 rounded-full text-white font-medium"
+                    style={{ background: ss.bg }}
+                  >
+                    {ss.label}
+                  </span>
+                  <button
+                    className="text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors"
+                    style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}
+                  >
+                    View Details
+                  </button>
+                  {b.status === "pending" && (
+                    <button className="text-xs font-medium" style={{ color: "#891D1A" }}>
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }

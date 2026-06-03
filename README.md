@@ -1,22 +1,46 @@
 # ClassReserve
 
-Minimal scaffold for ClassReserve — a campus room reservation web app using HTML/CSS/JS frontend and PHP + MySQL backend.
+Minimal scaffold for ClassReserve, a campus room reservation web app using HTML/CSS/JS frontend and PHP + MySQL backend.
 
-Tech stack
+## Tech Stack
+
 - Frontend: plain HTML, CSS, JavaScript
-- Backend: PHP (PDO)
+- Backend: PHP with PDO
 - Database: MySQL
 
-Quick setup (Windows, XAMPP/Laragon)
-1. Install XAMPP or Laragon, start Apache & MySQL.
-2. Create a database `classreserve` and import `db/schema.sql`.
-3. Copy `config.php.example` to `config.php` and update DB credentials.
-4. Put the `public/` folder into your web root (e.g., `C:/xampp/htdocs/classreserve`).
+## Quick Setup With XAMPP
 
-API endpoints are under `api/` and a small PDO helper lives at `api/db.php`.
+1. Install XAMPP, then start Apache and MySQL.
+2. Create a database named `classreserve`.
+3. Import `db/schema.sql` into the `classreserve` database.
+4. Copy `config.php.example` to `config.php`.
+5. Update `config.php` if your MySQL credentials are different.
+6. Put this project in your XAMPP web root, for example:
+   `C:/xampp/htdocs/classreserve`
+7. Open:
+   `http://localhost/classreserve/public/`
 
-This repository contains minimal files only — no design assets. Teammates can clone and run locally.
+API endpoints are under `api/`, and the PDO helper is at `api/db.php`.
 
-Next steps
+## Demo Login Accounts
+
+Importing `db/schema.sql` creates these demo accounts.
+
+All demo accounts use this password:
+
+`ClassReserve123!`
+
+| Role | Name | Email |
+| --- | --- | --- |
+| Admin | System Admin | `admin@classreserve.test` |
+| Faculty | Dr. Sarah Johnson | `sarah.johnson@classreserve.test` |
+| Faculty | Prof. David Lee | `david.lee@classreserve.test` |
+| Faculty | Dr. Maria Garcia | `maria.garcia@classreserve.test` |
+
+Public registration should be used for student or club accounts only. Faculty and admin accounts are seeded or created directly by an administrator.
+
+## Next Steps
+
 - Run the SQL in `db/schema.sql`.
-- Seed initial rooms and an admin user if desired.
+- Log in with one of the demo faculty/admin accounts above.
+- Add rooms and bookings for your local demo.

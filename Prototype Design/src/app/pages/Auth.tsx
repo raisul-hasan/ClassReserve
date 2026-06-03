@@ -1,22 +1,16 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
 import { DoorOpen, Mail, Lock, User, Moon, Sun } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 
-type UserRole = "student" | "faculty" | "admin";
+type UserRole = "student" | "club" | "faculty" | "admin";
+
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 export function Auth() {
   const navigate = useNavigate();
@@ -24,7 +18,7 @@ export function Auth() {
   const { theme, toggleTheme } = useTheme();
 
   const [selectedRole, setSelectedRole] = useState<UserRole>("student");
-  const [activeTab, setActiveTab] = useState<string>("login");
+  const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -36,265 +30,369 @@ export function Auth() {
 
   useEffect(() => {
     if (!user) return;
-
     if (user.role === "student") navigate("/student");
+    else if (user.role === "club") navigate("/club");
     else if (user.role === "faculty") navigate("/faculty");
     else navigate("/admin");
   }, [user, navigate]);
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
-    if (role === "admin") {
-      setActiveTab("login");
-    }
+    if (role === "admin" || role === "faculty") setActiveTab("login");
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = (e: FormEvent) => {
     e.preventDefault();
-
     if (!loginEmail.trim() || !loginPassword.trim()) {
       alert("Please enter email and password.");
       return;
     }
-
     login(loginEmail, loginPassword, selectedRole);
-
     if (selectedRole === "student") navigate("/student");
+    else if (selectedRole === "club") navigate("/club");
     else if (selectedRole === "faculty") navigate("/faculty");
     else navigate("/admin");
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleSignup = (e: FormEvent) => {
     e.preventDefault();
-
-    if (selectedRole === "admin") {
-      alert("Admin accounts are managed by the system.");
-      return;
-    }
-
+    if (selectedRole === "admin" || selectedRole === "faculty") { alert("Faculty and admin accounts are login-only."); return; }
     if (!signupName.trim() || !signupEmail.trim() || !signupPassword.trim()) {
       alert("Please complete all fields.");
       return;
     }
-
-    if (signupPassword !== signupConfirmPassword) {
-      alert("Passwords do not match.");
-      return;
-    }
-
+    if (signupPassword !== signupConfirmPassword) { alert("Passwords do not match."); return; }
     signup(signupName, signupEmail, signupPassword, selectedRole);
-
     if (selectedRole === "student") navigate("/student");
-    else navigate("/faculty");
+    else navigate("/club");
   };
 
+  const inputCls =
+    "pl-9 bg-white border border-[#891D1A]/20 focus-visible:ring-[#891D1A] rounded-md text-[#210706]";
+  const darkInputCls =
+    "pl-9 dark:bg-[#3A1210] dark:border-[#891D1A]/30 dark:text-[#F1E6D2] focus-visible:ring-[#891D1A]";
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4 transition-colors relative">
-      <div className="absolute top-4 right-4">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={toggleTheme}
-          className="rounded-xl border-gray-300 dark:border-gray-700 bg-white/80 dark:bg-gray-900/80 backdrop-blur dark:text-white"
-        >
-          {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-        </Button>
+    <div className="min-h-screen flex" style={DM_SANS}>
+      {/* Left panel */}
+      <div
+        className="hidden lg:flex lg:w-5/12 xl:w-1/2 flex-col items-center justify-center p-12 relative overflow-hidden"
+        style={{ background: "#210706" }}
+      >
+        {/* Subtle pattern overlay */}
+        <div
+          className="absolute inset-0 opacity-5"
+          style={{
+            backgroundImage:
+              "repeating-linear-gradient(45deg, #891D1A 0, #891D1A 1px, transparent 0, transparent 50%)",
+            backgroundSize: "20px 20px",
+          }}
+        />
+
+        <div className="relative z-10 text-center max-w-sm">
+          <div
+            className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-8"
+            style={{ background: "#891D1A" }}
+          >
+            <DoorOpen className="w-10 h-10 text-white" />
+          </div>
+          <h1
+            className="text-4xl text-white mb-4"
+            style={{ ...PLAYFAIR, fontWeight: 700, lineHeight: 1.2 }}
+          >
+            ClassReserve
+          </h1>
+          <p className="text-lg mb-2" style={{ color: "#F1E6D2", opacity: 0.8 }}>
+            Reserve your space.
+          </p>
+          <p className="text-lg" style={{ color: "#F1E6D2", opacity: 0.8 }}>
+            Own your time.
+          </p>
+
+          <div className="mt-12 flex flex-col gap-4 text-left">
+            {[
+              { label: "Instant availability checks", icon: "✓" },
+              { label: "Priority-based booking system", icon: "✓" },
+              { label: "Real-time conflict detection", icon: "✓" },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-3">
+                <div
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                  style={{ background: "#891D1A" }}
+                >
+                  {item.icon}
+                </div>
+                <span style={{ color: "#F1E6D2", opacity: 0.75 }}>{item.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      <Card className="w-full max-w-md rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900 shadow-sm">
-        <CardHeader className="text-center space-y-4 pb-4">
-          <div className="flex justify-center">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-sm">
-              <DoorOpen className="w-9 h-9 text-white" />
+      {/* Right panel */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#F1E6D2] dark:bg-[#210706] transition-colors relative">
+        {/* Theme toggle */}
+        <button
+          onClick={toggleTheme}
+          className="absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10 transition-colors"
+          style={{ color: "#5E657B" }}
+        >
+          {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+        </button>
+
+        {/* Mobile logo */}
+        <div className="lg:hidden mb-8 text-center">
+          <div
+            className="w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-3"
+            style={{ background: "#891D1A" }}
+          >
+            <DoorOpen className="w-7 h-7 text-white" />
+          </div>
+          <h1 className="text-2xl text-[#210706] dark:text-[#F1E6D2]" style={PLAYFAIR}>
+            ClassReserve
+          </h1>
+        </div>
+
+        {/* Card */}
+        <div
+          className="w-full max-w-md rounded-xl shadow-lg p-8"
+          style={{ background: "#FFFFFF", boxShadow: "0 4px 24px rgba(33,7,6,0.10)" }}
+        >
+          <h2
+            className="text-2xl text-[#210706] mb-1"
+            style={{ ...PLAYFAIR, fontWeight: 600 }}
+          >
+            Welcome back
+          </h2>
+          <p className="text-sm text-[#5E657B] mb-6">Sign in to manage your reservations</p>
+
+          {/* Role selector */}
+          <div className="mb-6">
+            <Label className="text-sm text-[#5E657B] mb-2 block">Sign in as</Label>
+            <div className="flex gap-2">
+              {(["student", "club", "faculty", "admin"] as UserRole[]).map((role) => (
+                <button
+                  key={role}
+                  onClick={() => handleRoleChange(role)}
+                  className="flex-1 py-2 px-3 rounded-full text-sm font-medium border transition-all capitalize"
+                  style={
+                    selectedRole === role
+                      ? { background: "#891D1A", color: "#F1E6D2", border: "1px solid #891D1A" }
+                      : { background: "transparent", color: "#5E657B", border: "1px solid #5E657B" }
+                  }
+                >
+                  {role}
+                </button>
+              ))}
             </div>
           </div>
 
-          <div>
-            <CardTitle className="text-2xl text-gray-900 dark:text-white">
-              Classroom Management System
-            </CardTitle>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              University Booking Platform
-            </p>
+          {(selectedRole === "admin" || selectedRole === "faculty") && (
+            <div
+              className="mb-4 p-3 rounded-lg text-sm"
+              style={{ background: "rgba(137,29,26,0.06)", color: "#891D1A" }}
+            >
+              Faculty and admin accounts are managed by the system. Self-registration is disabled.
+            </div>
+          )}
+
+          {/* Tabs */}
+          <div className="flex border-b border-[#891D1A]/15 mb-6">
+            <button
+              onClick={() => setActiveTab("login")}
+              className="flex-1 pb-2 text-sm font-medium transition-colors border-b-2"
+              style={
+                activeTab === "login"
+                  ? { color: "#891D1A", borderColor: "#891D1A" }
+                  : { color: "#5E657B", borderColor: "transparent" }
+              }
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => !(selectedRole === "admin" || selectedRole === "faculty") && setActiveTab("signup")}
+              disabled={selectedRole === "admin" || selectedRole === "faculty"}
+              className="flex-1 pb-2 text-sm font-medium transition-colors border-b-2"
+              style={
+                activeTab === "signup"
+                  ? { color: "#891D1A", borderColor: "#891D1A" }
+                  : selectedRole === "admin" || selectedRole === "faculty"
+                    ? { color: "#5E657B", opacity: 0.4, borderColor: "transparent" }
+                    : { color: "#5E657B", borderColor: "transparent" }
+              }
+            >
+              Create Account
+            </button>
           </div>
 
-          <div className="space-y-2 text-left">
-            <Label className="text-sm text-gray-700 dark:text-gray-300">Select Your Role</Label>
-            <Select value={selectedRole} onValueChange={(value) => handleRoleChange(value as UserRole)}>
-              <SelectTrigger className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="student">Student</SelectItem>
-                <SelectItem value="faculty">Faculty</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-
-        <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 mb-6 dark:bg-gray-800 rounded-xl">
-              <TabsTrigger value="login" className="rounded-xl dark:text-gray-300">
-                Login
-              </TabsTrigger>
-              <TabsTrigger
-                value="signup"
-                disabled={selectedRole === "admin"}
-                className="rounded-xl dark:text-gray-300"
-              >
-                Sign Up
-              </TabsTrigger>
-            </TabsList>
-
-            {selectedRole === "admin" && (
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900 rounded-xl">
-                <p className="text-sm text-blue-800 dark:text-blue-300">
-                  Admin accounts are managed by the system.
-                </p>
+          {activeTab === "login" && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="login-email" className="text-sm text-[#5E657B]">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="login-email"
+                    type="email"
+                    placeholder="you@university.edu"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={loginEmail}
+                    onChange={(e) => setLoginEmail(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
-            )}
 
-            <TabsContent value="login" className="space-y-4">
-              <form onSubmit={handleLogin} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="login-email" className="dark:text-gray-300">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="your.email@university.edu"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={loginEmail}
-                      onChange={(e) => setLoginEmail(e.target.value)}
-                      required
-                    />
-                  </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="login-password" className="text-sm text-[#5E657B]">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="login-password"
+                    type="password"
+                    placeholder="••••••••"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    required
+                  />
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="login-password" className="dark:text-gray-300">Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={loginPassword}
-                      onChange={(e) => setLoginPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500 dark:text-gray-400 capitalize">
-                    Logging in as {selectedRole}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-                    onClick={() => alert("Password reset flow can be connected later.")}
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-
-                <Button
-                  type="submit"
-                  className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl"
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="text-sm hover:underline"
+                  style={{ color: "#891D1A" }}
+                  onClick={() => alert("Password reset flow can be connected later.")}
                 >
-                  Login
-                </Button>
-              </form>
-            </TabsContent>
+                  Forgot password?
+                </button>
+              </div>
 
-            <TabsContent value="signup" className="space-y-4">
-              <form onSubmit={handleSignup} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signup-name" className="dark:text-gray-300">Full Name</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="signup-name"
-                      type="text"
-                      placeholder="John Doe"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={signupName}
-                      onChange={(e) => setSignupName(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-full text-[#F1E6D2] font-medium transition-colors"
+                style={{ ...PLAYFAIR, background: "#891D1A", fontSize: "15px" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+              >
+                Sign In
+              </button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="signup-email" className="dark:text-gray-300">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="your.email@university.edu"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={signupEmail}
-                      onChange={(e) => setSignupEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-password" className="dark:text-gray-300">Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={signupPassword}
-                      onChange={(e) => setSignupPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="signup-confirm" className="dark:text-gray-300">Confirm Password</Label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <Input
-                      id="signup-confirm"
-                      type="password"
-                      placeholder="••••••••"
-                      className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                      value={signupConfirmPassword}
-                      onChange={(e) => setSignupConfirmPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3 text-sm text-gray-600 dark:text-gray-300">
-                  Account type: <span className="font-medium capitalize">{selectedRole}</span>
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={selectedRole === "admin"}
-                  className="w-full bg-blue-600 hover:bg-blue-700 rounded-xl"
+              <p className="text-center text-sm text-[#5E657B]">
+                Don't have an account?{" "}
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  style={{ color: "#891D1A" }}
+                  onClick={() => selectedRole !== "admin" && selectedRole !== "faculty" && setActiveTab("signup")}
                 >
-                  Create Account
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                  Create one
+                </button>
+              </p>
+            </form>
+          )}
+
+          {activeTab === "signup" && (
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-name" className="text-sm text-[#5E657B]">Full Name</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="signup-name"
+                    type="text"
+                    placeholder="Jane Doe"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={signupName}
+                    onChange={(e) => setSignupName(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-email" className="text-sm text-[#5E657B]">Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="signup-email"
+                    type="email"
+                    placeholder="you@university.edu"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={signupEmail}
+                    onChange={(e) => setSignupEmail(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-password" className="text-sm text-[#5E657B]">Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="signup-password"
+                    type="password"
+                    placeholder="••••••••"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={signupPassword}
+                    onChange={(e) => setSignupPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="signup-confirm" className="text-sm text-[#5E657B]">Confirm Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
+                  <Input
+                    id="signup-confirm"
+                    type="password"
+                    placeholder="••••••••"
+                    className={`${inputCls} ${darkInputCls}`}
+                    value={signupConfirmPassword}
+                    onChange={(e) => setSignupConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div
+                className="p-3 rounded-lg text-sm"
+                style={{ background: "rgba(94,101,123,0.08)", color: "#5E657B" }}
+              >
+                Registering as:{" "}
+                <span className="font-semibold text-[#210706] capitalize">{selectedRole}</span>
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-full text-[#F1E6D2] font-medium transition-colors"
+                style={{ ...PLAYFAIR, background: "#891D1A", fontSize: "15px" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+              >
+                Create Account
+              </button>
+
+              <p className="text-center text-sm text-[#5E657B]">
+                Already have an account?{" "}
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  style={{ color: "#891D1A" }}
+                  onClick={() => setActiveTab("login")}
+                >
+                  Sign in
+                </button>
+              </p>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
