@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { ArrowLeft, ArrowRight, Check, Users, Upload } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { createBooking } from "../services/classReserveService";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -54,30 +55,53 @@ export function NewBooking() {
   const [eventName, setEventName] = useState("");
   const [description, setDescription] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const availableRooms = useMemo(
     () => roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity),
     [minCapacity]
   );
 
-  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : "/student";
+  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 
   const handleBack = () => {
     if (step === 1) navigate(`${base}/rooms`);
     else setStep((s) => s - 1);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
+    setMessage("");
     if (step === 1) {
-      if (!date || !startTime || !endTime) { alert("Please select date and time."); return; }
+      if (!date || !startTime || !endTime) { setMessage("Please select date and time."); return; }
     }
     if (step === 2) {
-      if (!selectedRoom) { alert("Please select a room."); return; }
+      if (!selectedRoom) { setMessage("Please select a room."); return; }
     }
     if (step === 3) {
-      if (!eventName.trim() || !attendees) { alert("Please fill all required fields."); return; }
-      alert(`Booking request submitted for ${selectedRoom}!`);
-      navigate(`${base}/booking-confirmation`, { state: { room: selectedRoom, date, time: `${startTime} – ${endTime}`, event: eventName } });
+      if (!eventName.trim() || !attendees) { setMessage("Please fill all required fields."); return; }
+      setIsSubmitting(true);
+      try {
+        await createBooking({
+          title: eventName,
+          roomName: selectedRoom,
+          date,
+          startTime,
+          endTime,
+          attendees: Number(attendees),
+          requesterRole: user?.role || "student",
+          requesterName: user?.name || "Requester",
+          hasDocument: Boolean(attachment),
+          attachment,
+          description,
+        } as any);
+        navigate(`${base}/booking-confirmation`, { state: { room: selectedRoom, date, time: `${startTime} - ${endTime}`, event: eventName } });
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not submit booking request.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
     setStep((s) => s + 1);
@@ -85,6 +109,7 @@ export function NewBooking() {
 
   const priorityLabel =
     user?.role === "faculty" ? "Faculty (High Priority)" :
+    user?.role === "club" ? "Club (Medium Priority)" :
     user?.role === "admin" ? "Admin" : "Student (Standard)";
 
   return (
@@ -107,6 +132,15 @@ export function NewBooking() {
           </p>
         </div>
       </div>
+
+      {message && (
+        <div
+          className="rounded-lg px-4 py-3 text-sm font-medium"
+          style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+        >
+          {message}
+        </div>
+      )}
 
       {/* Step progress */}
       <div className="bg-card rounded-xl p-5 shadow-sm">
@@ -306,17 +340,32 @@ export function NewBooking() {
 
           {/* File upload */}
           <div
-            className="rounded-lg border-2 border-dashed p-6 text-center"
+            className="relative rounded-lg border-2 border-dashed p-6 text-center"
             style={{ borderColor: "rgba(137,29,26,0.3)" }}
           >
             <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: "#891D1A" }} />
             <p className="text-sm font-medium" style={{ color: "#5E657B" }}>
-              Drag & drop files here, or{" "}
-              <span style={{ color: "#891D1A" }} className="cursor-pointer">browse</span>
+              {attachment ? attachment.name : "Drag & drop files here, or "}
+              {!attachment && <span style={{ color: "#891D1A" }} className="cursor-pointer">browse</span>}
             </p>
             <p className="text-xs mt-1" style={{ color: "#A89B8A" }}>
-              Supporting documents, event briefs, etc.
+              {attachment ? "This file will be attached to your booking request." : "Supporting documents, event briefs, etc."}
             </p>
+            <input
+              type="file"
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              onChange={(e) => setAttachment(e.target.files?.[0] || null)}
+            />
+            {attachment && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setAttachment(null); }}
+                className="relative z-10 mt-3 text-xs font-medium"
+                style={{ color: "#891D1A" }}
+              >
+                Remove file
+              </button>
+            )}
           </div>
 
           {/* Priority note */}
@@ -344,12 +393,13 @@ export function NewBooking() {
         </button>
         <button
           onClick={handleNext}
+          disabled={isSubmitting}
           className="px-6 py-2.5 rounded-full text-sm font-medium text-white flex items-center gap-2 transition-colors"
           style={{ background: "#891D1A" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
-          {step === 3 ? "Submit Booking Request" : "Continue"}
+          {isSubmitting ? "Submitting..." : step === 3 ? "Submit Booking Request" : "Continue"}
           {step < 3 && <ArrowRight className="w-4 h-4" />}
         </button>
       </div>

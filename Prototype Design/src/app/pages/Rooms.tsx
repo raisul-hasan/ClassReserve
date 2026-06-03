@@ -1,12 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import { Users, LayoutGrid, List, ExternalLink } from "lucide-react";
+import { Users, LayoutGrid, List, ExternalLink, Plus, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { createRoom, getAvailableRooms } from "../services/classReserveService";
+import { Room } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
-const rooms = [
+const fallbackRooms = [
   { id: 1, name: "Room A-301", capacity: 30, status: "available", equipment: ["Projector", "Whiteboard", "Wi-Fi"], building: "Building A", type: "Lecture" },
   { id: 2, name: "Room A-302", capacity: 40, status: "booked", equipment: ["Projector", "Computer", "Wi-Fi"], building: "Building A", type: "Lecture" },
   { id: 3, name: "Lab C-105", capacity: 25, status: "available", equipment: ["Computers", "Wi-Fi", "Projector"], building: "Building C", type: "Lab" },
@@ -31,8 +33,29 @@ export function Rooms() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [rooms, setRooms] = useState<Room[]>(fallbackRooms as Room[]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isSavingRoom, setIsSavingRoom] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    name: "",
+    building: "",
+    floor: "",
+    capacity: "30",
+    type: "Lecture" as Room["type"],
+    status: "available" as Room["status"],
+    equipment: "",
+    notes: "",
+  });
   const navigate = useNavigate();
   const { user } = useAuth();
+
+  useEffect(() => {
+    getAvailableRooms()
+      .then(setRooms)
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const filtered = rooms.filter((r) => {
     if (capacityFilter !== "all" && r.capacity < parseInt(capacityFilter)) return false;
@@ -43,7 +66,7 @@ export function Rooms() {
 
   const buildings = Array.from(new Set(rooms.map((r) => r.building)));
 
-  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : "/student";
+  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 
   const handleBook = (roomName: string) => {
     navigate(`${base}/new-booking`, { state: { roomName } });
@@ -53,8 +76,66 @@ export function Rooms() {
     navigate(`${base}/rooms/${encodeURIComponent(roomName)}`);
   };
 
+  const resetRoomForm = () => {
+    setRoomForm({
+      name: "",
+      building: "",
+      floor: "",
+      capacity: "30",
+      type: "Lecture",
+      status: "available",
+      equipment: "",
+      notes: "",
+    });
+  };
+
+  const refreshRooms = () => {
+    setIsLoading(true);
+    getAvailableRooms()
+      .then(setRooms)
+      .finally(() => setIsLoading(false));
+  };
+
+  const handleAddRoom = async () => {
+    setMessage("");
+    if (!roomForm.name.trim() || !roomForm.building.trim() || !roomForm.type) {
+      setMessage("Room name, building, and type are required.");
+      return;
+    }
+    const capacity = Number(roomForm.capacity);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      setMessage("Capacity must be a positive number.");
+      return;
+    }
+
+    setIsSavingRoom(true);
+    try {
+      const created = await createRoom({
+        name: roomForm.name.trim(),
+        building: roomForm.building.trim(),
+        floor: roomForm.floor.trim(),
+        capacity,
+        type: roomForm.type,
+        status: roomForm.status,
+        equipment: roomForm.equipment.split(",").map((item) => item.trim()).filter(Boolean),
+        notes: roomForm.notes.trim(),
+      });
+      setRooms((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setRoomModalOpen(false);
+      resetRoomForm();
+      setMessage("Room added.");
+      refreshRooms();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not add room.");
+    } finally {
+      setIsSavingRoom(false);
+    }
+  };
+
   const selectCls =
     "px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none cursor-pointer";
+  const inputCls =
+    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
 
   return (
     <div className="space-y-5" style={DM_SANS}>
@@ -64,11 +145,21 @@ export function Rooms() {
             Rooms
           </h1>
           <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-            Browse and manage classroom spaces
+            {isLoading ? "Loading classroom spaces..." : "Browse and manage classroom spaces"}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {user?.role === "admin" && (
+            <button
+              onClick={() => setRoomModalOpen(true)}
+              className="h-9 px-4 rounded-lg flex items-center gap-2 text-sm font-medium text-white transition-colors"
+              style={{ background: "#891D1A" }}
+            >
+              <Plus className="w-4 h-4" />
+              Add Room
+            </button>
+          )}
           <button
             onClick={() => setViewMode("grid")}
             className="w-9 h-9 rounded-lg flex items-center justify-center border transition-colors"
@@ -93,6 +184,15 @@ export function Rooms() {
           </button>
         </div>
       </div>
+
+      {message && (
+        <div
+          className="rounded-lg px-4 py-3 text-sm font-medium"
+          style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+        >
+          {message}
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div
@@ -215,8 +315,12 @@ export function Rooms() {
                     {room.equipment.map((eq, i) => (
                       <span
                         key={i}
-                        className="text-xs px-2 py-0.5 rounded-full"
-                        style={{ background: "#F1E6D2", color: "#5E657B" }}
+                        className="text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                        style={{
+                          background: "#F7EAD3",
+                          color: "#6F1D1B",
+                          border: "1px solid rgba(137,29,26,0.18)",
+                        }}
                       >
                         {eq}
                       </span>
@@ -286,8 +390,12 @@ export function Rooms() {
                           {room.equipment.slice(0, 3).map((eq, i) => (
                             <span
                               key={i}
-                              className="text-xs px-2 py-0.5 rounded-full"
-                              style={{ background: "#F1E6D2", color: "#5E657B" }}
+                              className="text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                              style={{
+                                background: "#F7EAD3",
+                                color: "#6F1D1B",
+                                border: "1px solid rgba(137,29,26,0.18)",
+                              }}
                             >
                               {eq}
                             </span>
@@ -309,6 +417,98 @@ export function Rooms() {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {roomModalOpen && user?.role === "admin" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(33,7,6,0.55)" }}
+          onClick={() => setRoomModalOpen(false)}
+        >
+          <div
+            className="bg-card rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground">
+                Add Room
+              </h2>
+              <button
+                onClick={() => setRoomModalOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10"
+                style={{ color: "#5E657B" }}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Room Name</label>
+                  <input value={roomForm.name} onChange={(e) => setRoomForm((p) => ({ ...p, name: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Room F-203" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Building</label>
+                  <input value={roomForm.building} onChange={(e) => setRoomForm((p) => ({ ...p, building: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Building F" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Floor</label>
+                  <input value={roomForm.floor} onChange={(e) => setRoomForm((p) => ({ ...p, floor: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="2nd Floor" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Capacity</label>
+                  <input type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm((p) => ({ ...p, capacity: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Type</label>
+                  <select value={roomForm.type} onChange={(e) => setRoomForm((p) => ({ ...p, type: e.target.value as Room["type"] }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+                    <option value="Lecture">Lecture</option>
+                    <option value="Lab">Lab</option>
+                    <option value="Seminar">Seminar</option>
+                    <option value="Auditorium">Auditorium</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Status</label>
+                  <select value={roomForm.status} onChange={(e) => setRoomForm((p) => ({ ...p, status: e.target.value as Room["status"] }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+                    <option value="available">Available</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Equipment</label>
+                <input value={roomForm.equipment} onChange={(e) => setRoomForm((p) => ({ ...p, equipment: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Projector, Whiteboard, Wi-Fi" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Notes</label>
+                <textarea value={roomForm.notes} onChange={(e) => setRoomForm((p) => ({ ...p, notes: e.target.value }))} rows={3} className={inputCls + " resize-none"} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Optional room notes" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setRoomModalOpen(false)}
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium border"
+                  style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddRoom}
+                  disabled={isSavingRoom}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-white"
+                  style={{ background: "#891D1A" }}
+                >
+                  {isSavingRoom ? "Adding..." : "Add Room"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

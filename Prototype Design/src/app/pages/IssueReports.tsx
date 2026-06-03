@@ -1,9 +1,11 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Flag, X, Search, Wrench, AlertTriangle, CheckCircle, Clock, Eye,
   Monitor, Wind, Trash2, Armchair, Users, HelpCircle, CalendarDays,
   MessageSquare, ThumbsUp, Send, ChevronDown, Plus, Shield,
 } from "lucide-react";
+import { addIssueComment, createMaintenanceBlockFromIssue, getIssues, updateIssueStatus } from "../services/classReserveService";
+import type { ClassroomIssue } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -205,6 +207,46 @@ function roleColor(role: string) {
 const inputCls = "w-full px-3 py-2 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
 const borderStyle = { borderColor: "rgba(137,29,26,0.2)" } as const;
 
+function formatIssueDate(value: string) {
+  if (!value) return "Just now";
+  const date = new Date(value.replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function roleLabel(role: string) {
+  if (role === "faculty") return "Faculty";
+  if (role === "club") return "Club";
+  if (role === "admin") return "Admin";
+  return "Student";
+}
+
+function fromServiceIssue(issue: ClassroomIssue): Issue {
+  return {
+    id: issue.id,
+    title: issue.title,
+    room: issue.roomName,
+    category: issue.category,
+    description: issue.description,
+    postedBy: issue.postedBy,
+    userRole: roleLabel(issue.userRole),
+    date: formatIssueDate(issue.createdAt),
+    status: issue.status,
+    priority: issue.priority,
+    comments: issue.comments.map((comment) => ({
+      id: comment.id,
+      author: comment.authorName,
+      role: roleLabel(comment.authorRole),
+      time: formatIssueDate(comment.createdAt),
+      text: comment.message,
+    })),
+    upvotes: issue.upvotes,
+    hasDocument: Boolean(issue.hasDocument),
+    isAffectingBooking: Boolean(issue.isAffectingBooking),
+    relatedBooking: issue.relatedBooking,
+    adminResponse: issue.adminResponse,
+  };
+}
+
 export function IssueReports() {
   const [issues, setIssues] = useState<Issue[]>(initialIssues);
   const [searchQuery, setSearchQuery] = useState("");
@@ -217,8 +259,16 @@ export function IssueReports() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectModalId, setRejectModalId] = useState<number | null>(null);
   const [maintenanceModalIssue, setMaintenanceModalIssue] = useState<Issue | null>(null);
-  const [maintenanceForm, setMaintenanceForm] = useState({ startDate: "", endDate: "", reason: "" });
+  const [maintenanceForm, setMaintenanceForm] = useState({ startDate: "", startTime: "08:00", endDate: "", endTime: "17:00", reason: "" });
   const [newComment, setNewComment] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    getIssues().then((items) => {
+      if (mounted) setIssues(items.map(fromServiceIssue));
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const filtered = useMemo(() => {
     let list = [...issues];
@@ -238,28 +288,32 @@ export function IssueReports() {
     return list;
   }, [issues, filterCategory, filterRoom, filterStatus, filterPriority, searchQuery]);
 
-  const updateStatus = (id: number, status: IssueStatus) => {
+  const updateStatus = async (id: number, status: IssueStatus, note?: string) => {
+    await updateIssueStatus(id, status, note);
     setIssues((prev) => prev.map((i) => i.id === id ? { ...i, status } : i));
     setSelectedIssue((prev) => prev?.id === id ? { ...prev, status } : prev);
   };
 
-  const submitAdminResponse = (id: number) => {
+  const submitAdminResponse = async (id: number) => {
     if (!adminResponseDraft.trim()) return;
+    await updateIssueStatus(id, selectedIssue?.status || "Under Review", adminResponseDraft.trim());
     setIssues((prev) => prev.map((i) => i.id === id ? { ...i, adminResponse: adminResponseDraft.trim() } : i));
     setSelectedIssue((prev) => prev?.id === id ? { ...prev, adminResponse: adminResponseDraft.trim() } : prev);
     setAdminResponseDraft("");
   };
 
-  const confirmReject = () => {
+  const confirmReject = async () => {
     if (rejectModalId == null) return;
+    await updateIssueStatus(rejectModalId, "Rejected", rejectReason.trim());
     setIssues((prev) => prev.map((i) => i.id === rejectModalId ? { ...i, status: "Rejected" } : i));
     setSelectedIssue((prev) => prev?.id === rejectModalId ? { ...prev, status: "Rejected" as IssueStatus } : prev);
     setRejectModalId(null);
     setRejectReason("");
   };
 
-  const handleAddComment = (issueId: number) => {
+  const handleAddComment = async (issueId: number) => {
     if (!newComment.trim()) return;
+    await addIssueComment(issueId, newComment.trim());
     const comment: Comment = { id: Date.now(), author: "Admin", role: "Admin", time: "Just now", text: newComment.trim() };
     setIssues((prev) => prev.map((i) => i.id === issueId ? { ...i, comments: [...i.comments, comment] } : i));
     setSelectedIssue((prev) => prev?.id === issueId ? { ...prev, comments: [...(prev.comments || []), comment] } : prev);
@@ -268,7 +322,7 @@ export function IssueReports() {
 
   const openMaintenanceModal = (issue: Issue) => {
     setMaintenanceModalIssue(issue);
-    setMaintenanceForm({ startDate: "", endDate: "", reason: issue.description.slice(0, 80) });
+    setMaintenanceForm({ startDate: "", startTime: "08:00", endDate: "", endTime: "17:00", reason: issue.description.slice(0, 80) });
   };
 
   const summaryStats = {
@@ -575,8 +629,16 @@ export function IssueReports() {
                   <input type="date" value={maintenanceForm.startDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, startDate: e.target.value }))} className={inputCls} style={borderStyle} />
                 </div>
                 <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Start Time</label>
+                  <input type="time" value={maintenanceForm.startTime} onChange={(e) => setMaintenanceForm((p) => ({ ...p, startTime: e.target.value }))} className={inputCls} style={borderStyle} />
+                </div>
+                <div className="space-y-1.5">
                   <label className="text-sm font-medium" style={{ color: "#5E657B" }}>End Date</label>
                   <input type="date" value={maintenanceForm.endDate} onChange={(e) => setMaintenanceForm((p) => ({ ...p, endDate: e.target.value }))} className={inputCls} style={borderStyle} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>End Time</label>
+                  <input type="time" value={maintenanceForm.endTime} onChange={(e) => setMaintenanceForm((p) => ({ ...p, endTime: e.target.value }))} className={inputCls} style={borderStyle} />
                 </div>
               </div>
               <div className="space-y-1.5">
@@ -587,8 +649,18 @@ export function IssueReports() {
             <div className="flex gap-3 mt-5">
               <button onClick={() => setMaintenanceModalIssue(null)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}>Cancel</button>
               <button
-                onClick={() => {
-                  updateStatus(maintenanceModalIssue.id, "In Progress");
+                onClick={async () => {
+                  if (!maintenanceForm.startDate || !maintenanceForm.startTime || !maintenanceForm.endDate || !maintenanceForm.endTime) {
+                    alert("Please select start and end date/time.");
+                    return;
+                  }
+                  await createMaintenanceBlockFromIssue(maintenanceModalIssue.id, {
+                    roomName: maintenanceModalIssue.room,
+                    startDateTime: `${maintenanceForm.startDate} ${maintenanceForm.startTime}:00`,
+                    endDateTime: `${maintenanceForm.endDate} ${maintenanceForm.endTime}:00`,
+                    reason: maintenanceForm.reason,
+                  });
+                  await updateStatus(maintenanceModalIssue.id, "In Progress");
                   setMaintenanceModalIssue(null);
                   alert(`Maintenance block created for ${maintenanceModalIssue.room}`);
                 }}

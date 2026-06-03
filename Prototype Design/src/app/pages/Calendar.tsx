@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { getCalendarEvents } from "../services/classReserveService";
+import type { CalendarEvent } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -18,7 +20,18 @@ const FILTER_PILLS: { key: FilterType; label: string }[] = [
   { key: "maintenance", label: "Maintenance" },
 ];
 
-const events = [
+type CalendarUiEvent = {
+  id: number;
+  title: string;
+  room: string;
+  date: string;
+  type: FilterType;
+  time: string;
+  status: string;
+  priority: string;
+};
+
+const initialEvents: CalendarUiEvent[] = [
   { id: 1, title: "Math 101", room: "A-301", date: "2026-04-01", type: "faculty", time: "10:00 AM", status: "approved", priority: "HIGH" },
   { id: 2, title: "Club Meeting", room: "B-205", date: "2026-04-01", type: "club", time: "2:00 PM", status: "pending", priority: "MEDIUM" },
   { id: 3, title: "Physics Lab", room: "C-105", date: "2026-04-02", type: "faculty", time: "9:00 AM", status: "approved", priority: "HIGH" },
@@ -32,6 +45,25 @@ const events = [
   { id: 11, title: "Dance Practice", room: "E-101", date: "2026-04-05", type: "club", time: "6:00 PM", status: "pending", priority: "MEDIUM" },
   { id: 12, title: "Department Meeting", room: "A-301", date: "2026-04-06", type: "faculty", time: "10:00 AM", status: "approved", priority: "HIGH" },
 ];
+
+function timeLabel(event: CalendarEvent) {
+  if (!event.startTime && !event.endTime) return "All day";
+  return `${event.startTime || "--"} - ${event.endTime || "--"}`;
+}
+
+function toUiEvent(event: CalendarEvent): CalendarUiEvent {
+  const type = event.status === "maintenance" ? "maintenance" : (event.ownerRole || "student");
+  return {
+    id: event.id,
+    title: event.title,
+    room: event.roomName,
+    date: event.date,
+    type,
+    time: timeLabel(event),
+    status: event.status,
+    priority: type === "faculty" ? "HIGH" : type === "club" ? "MEDIUM" : type === "student" ? "STANDARD" : "",
+  };
+}
 
 function eventChipColor(type: string) {
   switch (type) {
@@ -62,13 +94,22 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 export function Calendar() {
   const today = new Date();
+  const [events, setEvents] = useState<CalendarUiEvent[]>(initialEvents);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(3); // April = 3
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [selectedEvent, setSelectedEvent] = useState<typeof events[0] | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarUiEvent | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    getCalendarEvents().then((items) => {
+      if (mounted) setEvents(items.map(toUiEvent));
+    });
+    return () => { mounted = false; };
+  }, []);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -100,7 +141,7 @@ export function Calendar() {
     setDrawerOpen(true);
   };
 
-  const handleEventClick = (ev: typeof events[0], e: React.MouseEvent) => {
+  const handleEventClick = (ev: CalendarUiEvent, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedEvent(ev);
   };

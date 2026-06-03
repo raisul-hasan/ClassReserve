@@ -75,7 +75,7 @@ export type IssueCategory =
   | "Furniture Problem"
   | "Capacity Problem"
   | "Other";
-export type IssuePriority = "Low" | "Medium" | "High" | "Critical";
+export type IssuePriority = "Low" | "Medium" | "High" | "Urgent";
 
 export interface IssueComment {
   id: number;
@@ -99,6 +99,11 @@ export interface ClassroomIssue {
   comments: IssueComment[];
   upvotes: number;
   relatedBookingId?: number;
+  hasDocument?: boolean;
+  uploadedPath?: string;
+  attachment?: File | null;
+  isAffectingBooking?: boolean;
+  relatedBooking?: string;
   adminResponse?: string;
 }
 

@@ -27,6 +27,8 @@ export function Auth() {
   const [signupEmail, setSignupEmail] = useState("");
   const [signupPassword, setSignupPassword] = useState("");
   const [signupConfirmPassword, setSignupConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -41,30 +43,53 @@ export function Auth() {
     if (role === "admin" || role === "faculty") setActiveTab("login");
   };
 
-  const handleLogin = (e: FormEvent) => {
+  const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    setMessage("");
     if (!loginEmail.trim() || !loginPassword.trim()) {
-      alert("Please enter email and password.");
+      setMessage("Please enter email and password.");
       return;
     }
-    login(loginEmail, loginPassword, selectedRole);
-    if (selectedRole === "student") navigate("/student");
-    else if (selectedRole === "club") navigate("/club");
-    else if (selectedRole === "faculty") navigate("/faculty");
-    else navigate("/admin");
+
+    setIsSubmitting(true);
+    try {
+      const loggedInUser = await login(loginEmail, loginPassword, selectedRole);
+      if (loggedInUser.role === "student") navigate("/student");
+      else if (loggedInUser.role === "club") navigate("/club");
+      else if (loggedInUser.role === "faculty") navigate("/faculty");
+      else navigate("/admin");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Login failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleSignup = (e: FormEvent) => {
+  const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
-    if (selectedRole === "admin" || selectedRole === "faculty") { alert("Faculty and admin accounts are login-only."); return; }
+    setMessage("");
+    if (selectedRole === "admin" || selectedRole === "faculty") { setMessage("Faculty and admin accounts are login-only."); return; }
     if (!signupName.trim() || !signupEmail.trim() || !signupPassword.trim()) {
-      alert("Please complete all fields.");
+      setMessage("Please complete all fields.");
       return;
     }
-    if (signupPassword !== signupConfirmPassword) { alert("Passwords do not match."); return; }
-    signup(signupName, signupEmail, signupPassword, selectedRole);
-    if (selectedRole === "student") navigate("/student");
-    else navigate("/club");
+    if (signupPassword !== signupConfirmPassword) { setMessage("Passwords do not match."); return; }
+
+    setIsSubmitting(true);
+    try {
+      await signup(signupName, signupEmail, signupPassword, selectedRole);
+      setMessage("Account created. Please sign in.");
+      setActiveTab("login");
+      setLoginEmail(signupEmail);
+      setSignupName("");
+      setSignupEmail("");
+      setSignupPassword("");
+      setSignupConfirmPassword("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Registration failed.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const inputCls =
@@ -196,6 +221,15 @@ export function Auth() {
             </div>
           )}
 
+          {message && (
+            <div
+              className="mb-4 p-3 rounded-lg text-sm font-medium"
+              style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+            >
+              {message}
+            </div>
+          )}
+
           {/* Tabs */}
           <div className="flex border-b border-[#891D1A]/15 mb-6">
             <button
@@ -274,10 +308,11 @@ export function Auth() {
                 type="submit"
                 className="w-full py-2.5 rounded-full text-[#F1E6D2] font-medium transition-colors"
                 style={{ ...PLAYFAIR, background: "#891D1A", fontSize: "15px" }}
+                disabled={isSubmitting}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
               >
-                Sign In
+                {isSubmitting ? "Signing in..." : "Sign In"}
               </button>
 
               <p className="text-center text-sm text-[#5E657B]">
@@ -372,10 +407,11 @@ export function Auth() {
                 type="submit"
                 className="w-full py-2.5 rounded-full text-[#F1E6D2] font-medium transition-colors"
                 style={{ ...PLAYFAIR, background: "#891D1A", fontSize: "15px" }}
+                disabled={isSubmitting}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
               >
-                Create Account
+                {isSubmitting ? "Creating..." : "Create Account"}
               </button>
 
               <p className="text-center text-sm text-[#5E657B]">

@@ -1,21 +1,29 @@
 <?php
-// Admin endpoints for maintenance blocks (GET/POST)
-require_once __DIR__ . '/db.php';
+// Maintenance blocks are visible to logged-in users. Only admins can create them.
+require_once __DIR__ . '/helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
+    require_login();
     $stmt = $pdo->query('SELECT m.*, r.name as room_name FROM maintenance m JOIN rooms r ON m.room_id = r.id ORDER BY m.start_datetime');
-    echo json_encode($stmt->fetchAll());
-    exit;
+    json_response($stmt->fetchAll());
 }
 
 if ($method === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
+    require_role('admin');
+    $input = get_json_input();
+    $roomId = (int) ($input['room_id'] ?? 0);
+    $start = clean_string($input['start_datetime'] ?? '');
+    $end = clean_string($input['end_datetime'] ?? '');
+    $reason = clean_string($input['reason'] ?? '');
+
+    if ($roomId <= 0 || !valid_datetime($start) || !valid_datetime($end) || strtotime($end) <= strtotime($start)) {
+        json_response(['error' => 'Valid room, start time, and end time are required.'], 422);
+    }
+
     $stmt = $pdo->prepare('INSERT INTO maintenance (room_id, start_datetime, end_datetime, reason) VALUES (?, ?, ?, ?)');
-    $stmt->execute([$input['room_id'], $input['start_datetime'], $input['end_datetime'], $input['reason'] ?? null]);
-    echo json_encode(['ok' => true, 'id' => $pdo->lastInsertId()]);
-    exit;
+    $stmt->execute([$roomId, $start, $end, $reason ?: null]);
+    json_response(['ok' => true, 'id' => (int) $pdo->lastInsertId()], 201);
 }
 
-http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+json_response(['error' => 'Method not allowed'], 405);

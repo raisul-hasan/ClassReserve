@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Clock, BookOpen, Shield, FileText } from "lucide-react";
+import { getMyBookings } from "../services/classReserveService";
+import { useAuth } from "../context/AuthContext";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -7,7 +9,7 @@ const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 type Status = "approved" | "pending" | "rejected" | "cancelled";
 type RoleType = "Faculty" | "Club" | "Student";
 
-const bookings = [
+const fallbackBookings = [
   { id: 1, eventName: "Math 101 Lecture", userRole: "Faculty" as RoleType, user: "Dr. Sarah Johnson", room: "Room A-301", building: "Building A", date: "Apr 1, 2026", time: "10:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
   { id: 2, eventName: "Engineering Club Meeting", userRole: "Club" as RoleType, user: "Engineering Club", room: "Room B-205", building: "Building B", date: "Apr 1, 2026", time: "2:00 PM – 4:00 PM", status: "approved" as Status, hasDoc: false },
   { id: 3, eventName: "Study Group Session", userRole: "Student" as RoleType, user: "Michael Chen", room: "Lab C-105", building: "Building C", date: "Apr 2, 2026", time: "3:00 PM – 5:00 PM", status: "pending" as Status, hasDoc: false },
@@ -54,6 +56,28 @@ const tabs: { key: Tab; label: string }[] = [
 
 export function Bookings() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
+  const [bookings, setBookings] = useState(fallbackBookings);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    getMyBookings(user?.role || "student")
+      .then((items) => {
+        setBookings(items.map((item) => ({
+          id: item.id,
+          eventName: item.title,
+          userRole: (item.requesterRole.charAt(0).toUpperCase() + item.requesterRole.slice(1)) as RoleType,
+          user: item.requesterName,
+          room: item.roomName,
+          building: item.building || "Campus",
+          date: item.date,
+          time: `${item.startTime} - ${item.endTime}`,
+          status: item.status as Status,
+          hasDoc: item.hasDocument,
+        })));
+      })
+      .finally(() => setIsLoading(false));
+  }, [user?.role]);
 
   const filtered = useMemo(() => {
     if (activeTab === "all") return bookings;
@@ -67,7 +91,7 @@ export function Bookings() {
           Bookings
         </h1>
         <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-          All room booking requests and their current status
+          {isLoading ? "Loading booking requests..." : "All room booking requests and their current status"}
         </p>
       </div>
 

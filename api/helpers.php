@@ -66,3 +66,27 @@ function valid_datetime($value)
     $timestamp = strtotime($value);
     return $timestamp !== false;
 }
+
+function create_notification($pdo, $userId, $type, $title, $message)
+{
+    if (!$userId) {
+        return;
+    }
+
+    $allowedTypes = ['success', 'error', 'warning', 'pending', 'info'];
+    if (!in_array($type, $allowedTypes, true)) {
+        $type = 'info';
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)');
+    $stmt->execute([(int) $userId, $type, $title, $message]);
+}
+
+function create_role_notification($pdo, $roles, $type, $title, $message)
+{
+    $stmt = $pdo->prepare('SELECT id FROM users WHERE role IN (' . implode(',', array_fill(0, count((array) $roles), '?')) . ')');
+    $stmt->execute((array) $roles);
+    foreach ($stmt->fetchAll() as $row) {
+        create_notification($pdo, $row['id'], $type, $title, $message);
+    }
+}

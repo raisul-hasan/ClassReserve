@@ -115,9 +115,8 @@ export function StudentDashboard() {
           {todayRooms.map((room) => (
             <div
               key={room.id}
-              className="flex-shrink-0 w-44 rounded-xl p-4 border"
+              className="flex-shrink-0 w-44 rounded-xl p-4 border bg-card"
               style={{
-                background: "#FFFFFF",
                 borderColor: "rgba(137,29,26,0.12)",
                 borderLeft: `3px solid ${room.status === "available" ? "#3B6E4A" : "#891D1A"}`,
               }}

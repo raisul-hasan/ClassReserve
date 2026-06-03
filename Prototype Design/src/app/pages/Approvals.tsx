@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clock, Check, X } from "lucide-react";
+import { approveBooking, getPendingApprovals, rejectBooking } from "../services/classReserveService";
+import { useAuth } from "../context/AuthContext";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -40,14 +42,44 @@ function priorityStyle(p: string, role: string) {
 
 export function Approvals() {
   const [requests, setRequests] = useState<ApprovalRequest[]>(initialRequests);
+  const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+
+  useEffect(() => {
+    getPendingApprovals(user?.role || "faculty")
+      .then((items) => {
+        setRequests(items.map((item) => ({
+          id: item.id,
+          eventName: item.title,
+          user: item.requesterName,
+          role: item.requesterRole.charAt(0).toUpperCase() + item.requesterRole.slice(1),
+          priority: item.priority === "high" ? "high" : item.priority === "medium" ? "medium" : "low",
+          room: item.roomName,
+          building: item.building || "Campus",
+          date: item.date,
+          time: `${item.startTime} - ${item.endTime}`,
+          hasConflict: item.conflictStatus === "conflict" || item.conflictStatus === "maintenance",
+          conflictWith: item.conflictStatus === "maintenance" ? "Room is under maintenance" : "Possible booking conflict",
+          requestedAt: "From API",
+          description: "",
+          status: item.status === "approved" || item.status === "rejected" ? item.status : "pending",
+        })));
+      })
+      .finally(() => setIsLoading(false));
+  }, [user?.role]);
 
   const pending = useMemo(() => requests.filter((r) => r.status === "pending"), [requests]);
   const reviewed = useMemo(() => requests.filter((r) => r.status !== "pending"), [requests]);
 
-  const approve = (id: number) =>
+  const approve = async (id: number) => {
+    await approveBooking(id);
     setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
-  const reject = (id: number) =>
+  };
+  const reject = async (id: number) => {
+    const reason = window.prompt("Reason for rejection?", "Not available at the requested time.") || "Rejected";
+    await rejectBooking(id, reason);
     setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
+  };
 
   return (
     <div className="space-y-5" style={DM_SANS}>
@@ -57,7 +89,7 @@ export function Approvals() {
             Approvals
           </h1>
           <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-            Review and action pending booking requests
+            {isLoading ? "Loading approval queue..." : "Review and action pending booking requests"}
           </p>
         </div>
         <div

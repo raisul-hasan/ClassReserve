@@ -1,6 +1,6 @@
 <?php
 // GET: list rooms; POST: create room (admin)
-require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
@@ -12,6 +12,8 @@ if ($method === 'GET') {
     if (isset($_GET['capacity_max'])) { $where[] = 'capacity <= ?'; $params[] = (int)$_GET['capacity_max']; }
     if (!empty($_GET['type'])) { $where[] = 'type = ?'; $params[] = $_GET['type']; }
     if (!empty($_GET['building'])) { $where[] = 'building = ?'; $params[] = $_GET['building']; }
+    if (!empty($_GET['status'])) { $where[] = 'status = ?'; $params[] = $_GET['status']; }
+    if (!empty($_GET['equipment'])) { $where[] = 'equipment LIKE ?'; $params[] = '%' . $_GET['equipment'] . '%'; }
     if (!empty($_GET['q'])) { $where[] = 'name LIKE ?'; $params[] = '%' . $_GET['q'] . '%'; }
     if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
     $sql .= ' ORDER BY name';
@@ -23,12 +25,33 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, notes) VALUES (?, ?, ?, ?, ?)');
-    $stmt->execute([$input['name'], $input['capacity'] ?? 0, $input['type'] ?? null, $input['building'] ?? null, $input['notes'] ?? null]);
-    echo json_encode(['ok' => true, 'id' => $pdo->lastInsertId()]);
-    exit;
+    require_role('admin');
+    $input = get_json_input();
+
+    $name = clean_string($input['name'] ?? '');
+    $capacity = (int) ($input['capacity'] ?? 0);
+    $type = clean_string($input['type'] ?? '');
+    $building = clean_string($input['building'] ?? '');
+    $floor = clean_string($input['floor'] ?? '');
+    $equipment = clean_string($input['equipment'] ?? '');
+    $status = clean_string($input['status'] ?? 'available');
+    $notes = clean_string($input['notes'] ?? '');
+
+    if (!$name || !$building || !$type) {
+        json_response(['error' => 'Room name, building, and type are required.'], 400);
+    }
+
+    if ($capacity <= 0) {
+        json_response(['error' => 'Capacity must be a positive number.'], 400);
+    }
+
+    if (!in_array($status, ['available', 'booked', 'maintenance', 'disabled'], true)) {
+        json_response(['error' => 'Invalid room status.'], 400);
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, floor, equipment, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    $stmt->execute([$name, $capacity, $type, $building, $floor ?: null, $equipment ?: null, $status, $notes ?: null]);
+    json_response(['ok' => true, 'id' => $pdo->lastInsertId()]);
 }
 
-http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+json_response(['error' => 'Method not allowed'], 405);

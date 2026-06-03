@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router";
 import {
   LayoutDashboard,
@@ -19,6 +20,7 @@ import {
 import { Input } from "./ui/input";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../context/AuthContext";
+import { getNotifications } from "../services/classReserveService";
 
 const adminNavigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
@@ -84,6 +86,13 @@ export function Layout() {
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    getNotifications()
+      .then((items) => setUnreadCount(items.filter((item) => item.unread).length))
+      .catch(() => setUnreadCount(0));
+  }, [user?.id]);
 
   const handleLogout = () => {
     logout();
@@ -231,10 +240,14 @@ export function Layout() {
               style={{ color: "#5E657B" }}
             >
               <Bell className="w-5 h-5" />
-              <span
-                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full"
-                style={{ background: "#891D1A" }}
-              />
+              {unreadCount > 0 && (
+                <span
+                  className="absolute top-1 right-1 min-w-4 h-4 px-1 rounded-full text-[10px] leading-4 text-white text-center"
+                  style={{ background: "#891D1A" }}
+                >
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
             </button>
 
             <button

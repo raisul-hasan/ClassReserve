@@ -1,57 +1,90 @@
 <?php
-// Basic auth endpoints: register / login (POST)
-require_once __DIR__ . '/db.php';
+// Auth endpoints: session check (GET), register/login/logout (POST)
+require_once __DIR__ . '/helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+if ($method === 'GET') {
+    json_response(['ok' => true, 'user' => current_user()]);
+}
+
 if ($method !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
+    json_response(['error' => 'Method not allowed'], 405);
 }
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!isset($input['action'])) {
-    echo json_encode(['error' => 'Missing action']);
-    exit;
-}
+$input = get_json_input();
+$action = $input['action'] ?? '';
 
-if ($input['action'] === 'register') {
-    $name = $input['name'] ?? '';
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    if (!$email || !$password) {
-        echo json_encode(['error' => 'Email and password required']);
-        exit;
+if ($action === 'register') {
+    $name = clean_string($input['name'] ?? '');
+    $email = strtolower(clean_string($input['email'] ?? ''));
+    $password = (string) ($input['password'] ?? '');
+    $role = $input['role'] ?? 'student';
+
+    if (!$name || !$email || !$password) {
+        json_response(['error' => 'Name, email, and password are required.'], 400);
     }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        json_response(['error' => 'Please enter a valid email address.'], 400);
+    }
+
+    if (strlen($password) < 6) {
+        json_response(['error' => 'Password must be at least 6 characters.'], 400);
+    }
+
+    if (!in_array($role, ['student', 'club'], true)) {
+        $role = 'student';
+    }
+
     $hash = password_hash($password, PASSWORD_DEFAULT);
     $stmt = $pdo->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)');
+
     try {
-        $stmt->execute([$name, $email, $hash, $input['role'] ?? 'student']);
-        echo json_encode(['ok' => true]);
+        $stmt->execute([$name, $email, $hash, $role]);
+        json_response(['ok' => true, 'message' => 'Registration successful. Please log in.']);
     } catch (Exception $e) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Registration failed']);
+        json_response(['error' => 'Registration failed. This email may already be registered.'], 400);
     }
-    exit;
 }
 
-if ($input['action'] === 'login') {
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    $stmt = $pdo->prepare('SELECT id, password_hash, role, name FROM users WHERE email = ?');
+if ($action === 'login') {
+    $email = strtolower(clean_string($input['email'] ?? ''));
+    $password = (string) ($input['password'] ?? '');
+
+    if (!$email || !$password) {
+        json_response(['error' => 'Email and password are required.'], 400);
+    }
+
+    $stmt = $pdo->prepare('SELECT id, password_hash, role, name, email FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
+
     if ($user && password_verify($password, $user['password_hash'])) {
-        session_start();
+        session_regenerate_id(true);
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['role'] = $user['role'];
         $_SESSION['name'] = $user['name'];
-        echo json_encode(['ok' => true, 'user' => ['id' => $user['id'], 'name' => $user['name'], 'role' => $user['role']]]);
-    } else {
-        http_response_code(401);
-        echo json_encode(['error' => 'Invalid credentials']);
+        $_SESSION['email'] = $user['email'];
+        json_response([
+            'ok' => true,
+            'message' => 'Login successful.',
+            'user' => [
+                'id' => (int) $user['id'],
+                'name' => $user['name'],
+                'email' => $user['email'],
+                'role' => $user['role'],
+            ],
+        ]);
     }
-    exit;
+
+    json_response(['error' => 'Invalid email or password.'], 401);
 }
 
-echo json_encode(['error' => 'Unknown action']);
+if ($action === 'logout') {
+    $_SESSION = [];
+    session_destroy();
+    json_response(['ok' => true, 'message' => 'Logged out.']);
+}
+
+json_response(['error' => 'Unknown action.'], 400);

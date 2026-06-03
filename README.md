@@ -42,5 +42,9 @@ Public registration should be used for student or club accounts only. Faculty an
 ## Next Steps
 
 - Run the SQL in `db/schema.sql`.
+- If you already imported an older schema, run `db/update_rooms_for_react.sql` once instead of recreating the database.
+- If your database does not have forum/report tables yet, run `db/update_issues.sql` once.
+- If you already ran `db/update_issues.sql` before issue attachments were added, run `db/update_issue_uploads.sql` once.
+- If your database does not have notifications yet, run `db/update_notifications.sql` once.
 - Log in with one of the demo faculty/admin accounts above.
-- Add rooms and bookings for your local demo.
+- Add rooms, bookings, issue reports, and maintenance blocks for your local demo.

@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { getSession, loginWithApi, logoutWithApi, signupWithApi } from '../services/classReserveService';
 
 export type UserRole = 'student' | 'club' | 'faculty' | 'admin';
 
 export interface User {
+  id?: number;
   name: string;
   email: string;
   role: UserRole;
@@ -10,9 +12,11 @@ export interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, role: UserRole) => void;
-  signup: (name: string, email: string, password: string, role: UserRole) => void;
-  logout: () => void;
+  isLoading: boolean;
+  login: (email: string, password: string, role: UserRole) => Promise<User>;
+  signup: (name: string, email: string, password: string, role: UserRole) => Promise<void>;
+  logout: () => Promise<void>;
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,38 +26,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem('user');
     return saved ? JSON.parse(saved) : null;
   });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (email: string, _password: string, role: UserRole) => {
-    const mockUser: User = {
-      name:
-        role === 'admin'
-          ? 'System Admin'
-          : role === 'faculty'
-            ? 'Dr. Sarah Johnson'
-            : role === 'club'
-              ? 'Computing Club'
-              : 'Michael Chen',
-      email,
-      role,
-    };
+  useEffect(() => {
+    getSession()
+      .then((data) => {
+        if (data.user) {
+          setUser(data.user);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+      })
+      .catch(() => {
+        // Keep local mock user if the PHP API is not running.
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
 
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
+  const login = async (email: string, password: string, role: UserRole) => {
+    try {
+      const apiUser = await loginWithApi(email, password);
+      const nextUser: User = {
+        id: apiUser.id,
+        name: apiUser.name,
+        email: apiUser.email || email,
+        role: apiUser.role,
+      };
+      setUser(nextUser);
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      return nextUser;
+    } catch (error) {
+      const saved = localStorage.getItem('user');
+      if (!saved) {
+        throw error;
+      }
+
+      const fallbackUser: User = JSON.parse(saved);
+      if (fallbackUser.email !== email || fallbackUser.role !== role) {
+        throw error;
+      }
+
+      setUser(fallbackUser);
+      return fallbackUser;
+    }
   };
 
-  const signup = (name: string, email: string, _password: string, role: UserRole) => {
+  const signup = async (name: string, email: string, password: string, role: UserRole) => {
+    if (role !== 'student' && role !== 'club') {
+      throw new Error('Only student and club accounts can sign up.');
+    }
+
+    await signupWithApi(name, email, password, role);
     const newUser: User = { name, email, role };
-    setUser(newUser);
     localStorage.setItem('user', JSON.stringify(newUser));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await logoutWithApi().catch(() => undefined);
     setUser(null);
     localStorage.removeItem('user');
   };
 
+  const updateUser = (nextUser: User) => {
+    setUser(nextUser);
+    localStorage.setItem('user', JSON.stringify(nextUser));
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

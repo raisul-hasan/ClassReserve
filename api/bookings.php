@@ -1,14 +1,21 @@
 <?php
 // Simple booking endpoints: list and create with conflict check
-require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/helpers.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
+$user = require_login();
 
 if ($method === 'GET') {
-    $sql = 'SELECT b.*, u.name as user_name, r.name as room_name FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id';
+    $sql = 'SELECT b.*, u.name as user_name, u.role as user_role, r.name as room_name, r.building FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id';
     $where = [];
     $params = [];
-    if (!empty($_GET['user_id'])) { $where[] = 'b.user_id = ?'; $params[] = $_GET['user_id']; }
+    if (!in_array($user['role'], ['admin', 'faculty'], true)) {
+        $where[] = 'b.user_id = ?';
+        $params[] = $user['id'];
+    } elseif (!empty($_GET['user_id'])) {
+        $where[] = 'b.user_id = ?';
+        $params[] = $_GET['user_id'];
+    }
     if (!empty($_GET['room_id'])) { $where[] = 'b.room_id = ?'; $params[] = $_GET['room_id']; }
     if (!empty($_GET['status'])) { $where[] = 'b.status = ?'; $params[] = $_GET['status']; }
     if ($where) $sql .= ' WHERE ' . implode(' AND ', $where);
@@ -49,9 +56,26 @@ if ($method === 'POST') {
         if (empty($input['id'])) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
         $id = $input['id'];
         if (!in_array($action, ['approve','reject','cancel'])) { http_response_code(400); echo json_encode(['error' => 'Invalid action']); exit; }
+        if (in_array($action, ['approve', 'reject'], true) && !in_array($user['role'], ['admin', 'faculty'], true)) {
+            json_response(['error' => 'Only faculty or admin can approve or reject bookings.'], 403);
+        }
+        $detailsStmt = $pdo->prepare('SELECT b.user_id, b.title, b.start_datetime, r.name AS room_name FROM bookings b LEFT JOIN rooms r ON b.room_id = r.id WHERE b.id = ?');
+        $detailsStmt->execute([$id]);
+        $bookingDetails = $detailsStmt->fetch();
+
         $newStatus = $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'cancelled');
         $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
         $stmt->execute([$newStatus, $id]);
+
+        if ($bookingDetails && in_array($action, ['approve', 'reject'], true)) {
+            $title = $action === 'approve' ? 'Booking Approved' : 'Booking Rejected';
+            $type = $action === 'approve' ? 'success' : 'error';
+            $roomName = $bookingDetails['room_name'] ?: 'your selected room';
+            $bookingTitle = $bookingDetails['title'] ?: 'Your booking';
+            $message = $bookingTitle . ' for ' . $roomName . ' on ' . $bookingDetails['start_datetime'] . ' has been ' . $newStatus . '.';
+            create_notification($pdo, $bookingDetails['user_id'], $type, $title, $message);
+        }
+
         echo json_encode(['ok' => true]);
         exit;
     }
@@ -60,30 +84,52 @@ if ($method === 'POST') {
     $start = $input['start_datetime'] ?? null;
     $end = $input['end_datetime'] ?? null;
     $room_id = $input['room_id'] ?? null;
-    if (!$start || !$end || !$room_id) { http_response_code(400); echo json_encode(['error' => 'Missing required fields']); exit; }
+    if (!$start || !$end || !$room_id) { json_response(['error' => 'Missing required fields'], 400); }
+    if (!valid_datetime($start) || !valid_datetime($end)) { json_response(['error' => 'Invalid date/time'], 400); }
+    if (strtotime($end) <= strtotime($start)) { json_response(['error' => 'End time must be after start time'], 400); }
 
-    // basic conflict detection: check approved bookings
-    $conflictStmt = $pdo->prepare("SELECT id FROM bookings WHERE room_id = ? AND status = 'approved' AND NOT (end_datetime <= ? OR start_datetime >= ?)");
+    $roomStmt = $pdo->prepare("SELECT id, status FROM rooms WHERE id = ?");
+    $roomStmt->execute([$room_id]);
+    $room = $roomStmt->fetch();
+    if (!$room) { json_response(['error' => 'Room not found'], 404); }
+    if ($room['status'] !== 'available') { json_response(['error' => 'Room is not available for booking'], 409); }
+
+    // Pending bookings also block duplicate requests while they wait for review.
+    $conflictStmt = $pdo->prepare("SELECT id FROM bookings WHERE room_id = ? AND status IN ('pending', 'approved') AND NOT (end_datetime <= ? OR start_datetime >= ?)");
     $conflictStmt->execute([$room_id, $start, $end]);
     if ($conflictStmt->fetch()) {
-        http_response_code(409);
-        echo json_encode(['error' => 'Time conflict with existing booking']);
-        exit;
+        json_response(['error' => 'Time conflict with an existing pending or approved booking'], 409);
     }
+
+    $maintenanceStmt = $pdo->prepare('SELECT id FROM maintenance WHERE room_id = ? AND NOT (end_datetime <= ? OR start_datetime >= ?)');
+    $maintenanceStmt->execute([$room_id, $start, $end]);
+    if ($maintenanceStmt->fetch()) {
+        json_response(['error' => 'Room is blocked for maintenance during that time'], 409);
+    }
+
+    $priority = $user['role'] === 'faculty' ? 3 : ($user['role'] === 'club' ? 2 : 1);
 
     $stmt = $pdo->prepare('INSERT INTO bookings (user_id, room_id, start_datetime, end_datetime, status, priority, title, description, uploaded_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     $stmt->execute([
-        $input['user_id'] ?? null,
+        $user['id'],
         $room_id,
         $start,
         $end,
         'pending',
-        $input['priority'] ?? 1,
+        $priority,
         $input['title'] ?? null,
         $input['description'] ?? null,
         $uploaded_path
     ]);
-    echo json_encode(['ok' => true, 'id' => $pdo->lastInsertId()]);
+    $bookingId = $pdo->lastInsertId();
+    create_role_notification(
+        $pdo,
+        ['admin', 'faculty'],
+        'pending',
+        'New Booking Request',
+        ($input['title'] ?? 'A booking request') . ' is waiting for approval.'
+    );
+    echo json_encode(['ok' => true, 'id' => $bookingId]);
     exit;
 }
 
@@ -91,8 +137,13 @@ if ($method === 'DELETE') {
     // cancel by id: /api/bookings.php?id=123
     $id = $_GET['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
-    $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
-    $stmt->execute(['cancelled', $id]);
+    if (in_array($user['role'], ['admin', 'faculty'], true)) {
+        $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
+        $stmt->execute(['cancelled', $id]);
+    } else {
+        $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ? AND user_id = ?');
+        $stmt->execute(['cancelled', $id, $user['id']]);
+    }
     echo json_encode(['ok' => true]);
     exit;
 }

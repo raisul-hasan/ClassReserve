@@ -5,10 +5,129 @@ import {
   ClassroomIssue,
   IssueStatus,
   MaintenanceBlock,
+  Notification,
   Room,
   RoomAvailabilityFilters,
   UserRole,
 } from "../types/classReserve";
+
+export type ApiUser = {
+  id?: number;
+  name: string;
+  email: string;
+  role: UserRole;
+};
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost/classreserve/api";
+
+async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${API_BASE}/${path}`, {
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "API request failed.");
+  }
+
+  return data as T;
+}
+
+async function apiFormRequest<T>(path: string, body: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}/${path}`, {
+    method: "POST",
+    credentials: "include",
+    body,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "API request failed.");
+  }
+
+  return data as T;
+}
+
+function toRoom(row: any): Room {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    building: row.building || "Campus",
+    floor: row.floor || undefined,
+    capacity: Number(row.capacity || 0),
+    type: row.type || "Lecture",
+    equipment: row.equipment ? String(row.equipment).split(",").map((item) => item.trim()).filter(Boolean) : ["Projector", "Whiteboard"],
+    status: row.status || "available",
+  };
+}
+
+function toBooking(row: any): Booking {
+  const start = row.start_datetime ? new Date(row.start_datetime.replace(" ", "T")) : null;
+  const end = row.end_datetime ? new Date(row.end_datetime.replace(" ", "T")) : null;
+  const requesterRole = (row.user_role || row.role || "student") as UserRole;
+
+  return {
+    id: Number(row.id),
+    title: row.title || "Room Booking",
+    requesterName: row.user_name || "Requester",
+    requesterRole,
+    roomName: row.room_name || "Room",
+    building: row.building || "",
+    date: start ? start.toISOString().slice(0, 10) : "",
+    startTime: start ? start.toTimeString().slice(0, 5) : "",
+    endTime: end ? end.toTimeString().slice(0, 5) : "",
+    attendees: Number(row.attendees || 0),
+    priority: row.priority >= 3 ? "high" : row.priority >= 2 ? "medium" : "standard",
+    status: row.status || "pending",
+    hasDocument: Boolean(row.uploaded_path),
+    conflictStatus: "clear",
+  };
+}
+
+function toIssue(row: any): ClassroomIssue {
+  return {
+    id: Number(row.id),
+    title: row.title,
+    roomName: row.room_name || row.roomName,
+    category: row.category,
+    postedBy: row.posted_by || row.postedBy || "Reporter",
+    userRole: (row.user_role || row.userRole || "student") as UserRole,
+    createdAt: row.created_at || row.createdAt || "",
+    description: row.description,
+    status: row.status || "Open",
+    priority: row.priority || "Medium",
+    comments: (row.comments || []).map((comment: any) => ({
+      id: Number(comment.id),
+      authorName: comment.author_name || comment.authorName,
+      authorRole: (comment.author_role || comment.authorRole || "student") as UserRole,
+      message: comment.message,
+      createdAt: comment.created_at || comment.createdAt || "",
+    })),
+    upvotes: Number(row.upvotes || 0),
+    relatedBookingId: row.related_booking_id ? Number(row.related_booking_id) : undefined,
+    hasDocument: Boolean(row.has_document ?? row.hasDocument ?? row.uploaded_path),
+    uploadedPath: row.uploaded_path || row.uploadedPath || undefined,
+    isAffectingBooking: Boolean(row.is_affecting_booking ?? row.isAffectingBooking),
+    relatedBooking: row.related_booking || row.relatedBooking || undefined,
+    adminResponse: row.admin_response || row.adminResponse || undefined,
+  };
+}
+
+function toNotification(row: any): Notification {
+  return {
+    id: Number(row.id),
+    title: row.title,
+    message: row.message,
+    type: row.type || "info",
+    createdAt: row.created_at || row.createdAt || "",
+    unread: !Boolean(row.is_read ?? row.read),
+  };
+}
 
 const mockRooms: Room[] = [
   { id: 1, name: "Room A-301", building: "Building A", floor: "3rd Floor", capacity: 30, type: "Lecture", equipment: ["Projector", "Whiteboard", "Wi-Fi"], status: "available" },
@@ -60,100 +179,428 @@ const mockIssues: ClassroomIssue[] = [
   },
 ];
 
+const mockNotifications: Notification[] = [
+  { id: 1, type: "success", title: "Booking Approved", message: "Your booking for Room A-301 has been approved.", createdAt: "2026-06-03 09:15", unread: true },
+  { id: 2, type: "warning", title: "New Issue Report", message: "Projector flickering was reported for Room A-301.", createdAt: "2026-06-03 10:00", unread: true },
+  { id: 3, type: "info", title: "System Update", message: "ClassReserve is running in demo mode.", createdAt: "2026-06-02 08:00", unread: false },
+];
+
 function wait<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), 120));
 }
 
+export async function getSession() {
+  return apiRequest<{ ok: boolean; user: ApiUser | null }>("auth.php");
+}
+
+export async function loginWithApi(email: string, password: string) {
+  const data = await apiRequest<{ ok: boolean; message?: string; user: ApiUser }>("auth.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "login", email, password }),
+  });
+
+  return data.user;
+}
+
+export async function signupWithApi(name: string, email: string, password: string, role: "student" | "club") {
+  return apiRequest<{ ok: boolean; message?: string }>("auth.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "register", name, email, password, role }),
+  });
+}
+
+export async function logoutWithApi() {
+  return apiRequest<{ ok: boolean }>("auth.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "logout" }),
+  });
+}
+
+export async function getProfile() {
+  const data = await apiRequest<{ ok: boolean; user: ApiUser }>("profile.php");
+  return data.user;
+}
+
+export async function updateProfile(name: string) {
+  const data = await apiRequest<{ ok: boolean; message?: string; user: ApiUser }>("profile.php", {
+    method: "POST",
+    body: JSON.stringify({ action: "update_profile", name }),
+  });
+  return data.user;
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return apiRequest<{ ok: boolean; message?: string }>("profile.php", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "change_password",
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
 export async function getAvailableRooms(filters: RoomAvailabilityFilters = {}) {
-  return wait(mockRooms.filter((room) => {
+  try {
+    const params = new URLSearchParams();
+    if (filters.minimumCapacity) params.set("capacity_min", String(filters.minimumCapacity));
+    if (filters.building && filters.building !== "all") params.set("building", filters.building);
+    if (filters.roomType && filters.roomType !== "all") params.set("type", filters.roomType);
+    const query = params.toString();
+    const rows = await apiRequest<any[]>(`rooms.php${query ? `?${query}` : ""}`);
+    return rows.map(toRoom);
+  } catch {
+    return wait(mockRooms.filter((room) => {
     if (filters.minimumCapacity && room.capacity < filters.minimumCapacity) return false;
     if (filters.building && room.building !== filters.building) return false;
     if (filters.roomType && room.type !== filters.roomType) return false;
     if (filters.equipment?.length && !filters.equipment.every((item) => room.equipment.includes(item))) return false;
     return room.status !== "disabled";
-  }));
+    }));
+  }
+}
+
+export async function createRoom(payload: Partial<Room> & { notes?: string }) {
+  const data = await apiRequest<{ ok: boolean; id: number }>("rooms.php", {
+    method: "POST",
+    body: JSON.stringify({
+      name: payload.name,
+      capacity: payload.capacity,
+      type: payload.type,
+      building: payload.building,
+      floor: payload.floor,
+      equipment: payload.equipment?.join(", "),
+      status: payload.status || "available",
+      notes: payload.notes || "",
+    }),
+  });
+
+  return {
+    id: data.id,
+    name: payload.name || "New Room",
+    building: payload.building || "Campus",
+    floor: payload.floor,
+    capacity: Number(payload.capacity || 0),
+    type: payload.type || "Lecture",
+    equipment: payload.equipment || [],
+    status: payload.status || "available",
+  } as Room;
 }
 
 export async function createBooking(payload: Partial<Booking>) {
+  if (payload.roomName || payload.roomName === "") {
+    let room = mockRooms.find((item) => item.name === payload.roomName);
+    try {
+      const rooms = await getAvailableRooms();
+      room = rooms.find((item) => item.name === payload.roomName) || room;
+    } catch {
+      // Mock room lookup remains available below.
+    }
+    payload = { ...payload, roomName: payload.roomName, id: payload.id };
+    try {
+      const start = `${payload.date} ${payload.startTime}:00`;
+      const end = `${payload.date} ${payload.endTime}:00`;
+      const attachment = (payload as any).attachment as File | undefined;
+      if (attachment) {
+        const formData = new FormData();
+        formData.append("room_id", String(room?.id || (payload as any).roomId || ""));
+        formData.append("start_datetime", start);
+        formData.append("end_datetime", end);
+        formData.append("title", payload.title || "");
+        formData.append("description", (payload as any).description || "");
+        formData.append("attachment", attachment);
+        return await apiFormRequest<{ ok: boolean; id: number; message?: string }>("bookings.php", formData);
+      }
+      return await apiRequest<{ ok: boolean; id: number; message?: string }>("bookings.php", {
+        method: "POST",
+        body: JSON.stringify({
+          room_id: room?.id || (payload as any).roomId,
+          start_datetime: start,
+          end_datetime: end,
+          title: payload.title,
+          description: (payload as any).description || "",
+          priority: payload.requesterRole === "faculty" ? 3 : payload.requesterRole === "club" ? 2 : 1,
+        }),
+      });
+    } catch {
+      // Fall through to mock response below.
+    }
+  }
+
   const priority = payload.requesterRole === "faculty" ? "high" : payload.requesterRole === "club" ? "medium" : "standard";
   return wait({ id: Date.now(), status: "pending" as BookingStatus, priority, ...payload });
 }
 
 export async function getMyBookings(role: UserRole = "student") {
-  if (role === "admin" || role === "faculty") return wait(mockBookings);
-  return wait(mockBookings.filter((booking) => booking.requesterRole === role || booking.requesterRole === "student"));
+  try {
+    const rows = await apiRequest<any[]>("bookings.php");
+    return rows.map(toBooking);
+  } catch {
+    if (role === "admin" || role === "faculty") return wait(mockBookings);
+    return wait(mockBookings.filter((booking) => booking.requesterRole === role || booking.requesterRole === "student"));
+  }
 }
 
 export async function getAllBookings() {
-  return wait([...mockBookings].sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole)));
+  try {
+    const rows = await apiRequest<any[]>("bookings.php");
+    return rows.map(toBooking).sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole));
+  } catch {
+    return wait([...mockBookings].sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole)));
+  }
 }
 
 export async function getPendingApprovals(role: UserRole) {
-  const allowedRoles: UserRole[] = role === "faculty" ? ["student", "club"] : ["student", "club", "faculty"];
-  return wait(mockBookings.filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole)));
+  try {
+    const bookings = await getAllBookings();
+    const allowedRoles: UserRole[] = role === "faculty" ? ["student", "club"] : ["student", "club", "faculty"];
+    return bookings.filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole));
+  } catch {
+    const allowedRoles: UserRole[] = role === "faculty" ? ["student", "club"] : ["student", "club", "faculty"];
+    return wait(mockBookings.filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole)));
+  }
 }
 
 export async function approveBooking(id: number, reason?: string) {
-  return wait({ ok: true, id, status: "approved" as BookingStatus, reason });
+  try {
+    return await apiRequest<{ ok: boolean }>("bookings.php", {
+      method: "POST",
+      body: JSON.stringify({ id, action: "approve", reason }),
+    });
+  } catch {
+    return wait({ ok: true, id, status: "approved" as BookingStatus, reason });
+  }
 }
 
 export async function rejectBooking(id: number, reason: string) {
-  return wait({ ok: true, id, status: "rejected" as BookingStatus, reason });
+  try {
+    return await apiRequest<{ ok: boolean }>("bookings.php", {
+      method: "POST",
+      body: JSON.stringify({ id, action: "reject", reason }),
+    });
+  } catch {
+    return wait({ ok: true, id, status: "rejected" as BookingStatus, reason });
+  }
 }
 
 export async function getCalendarEvents() {
-  const bookingEvents: CalendarEvent[] = mockBookings.map((booking) => ({
-    id: booking.id,
-    title: booking.title,
-    roomName: booking.roomName,
-    date: booking.date,
-    startTime: booking.startTime,
-    endTime: booking.endTime,
-    status: booking.status,
-    ownerRole: booking.requesterRole,
-  }));
-  const maintenanceEvents: CalendarEvent[] = mockMaintenance.map((block) => ({
-    id: block.id,
-    title: `Maintenance: ${block.reason}`,
-    roomName: block.roomName,
-    date: block.startDateTime.slice(0, 10),
-    startTime: block.startDateTime.slice(11, 16),
-    endTime: block.endDateTime.slice(11, 16),
-    status: "maintenance",
-  }));
-  return wait([...bookingEvents, ...maintenanceEvents]);
+  try {
+    const [bookings, maintenance] = await Promise.all([getAllBookings(), getMaintenanceBlocks()]);
+    const bookingEvents: CalendarEvent[] = bookings.map((booking) => ({
+      id: booking.id,
+      title: booking.title,
+      roomName: booking.roomName,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      ownerRole: booking.requesterRole,
+    }));
+    const maintenanceEvents: CalendarEvent[] = maintenance.map((block) => ({
+      id: block.id,
+      title: `Maintenance: ${block.reason}`,
+      roomName: block.roomName,
+      date: block.startDateTime.slice(0, 10),
+      startTime: block.startDateTime.slice(11, 16),
+      endTime: block.endDateTime.slice(11, 16),
+      status: "maintenance",
+    }));
+    return [...bookingEvents, ...maintenanceEvents];
+  } catch {
+    const bookingEvents: CalendarEvent[] = mockBookings.map((booking) => ({
+      id: booking.id,
+      title: booking.title,
+      roomName: booking.roomName,
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      status: booking.status,
+      ownerRole: booking.requesterRole,
+    }));
+    const maintenanceEvents: CalendarEvent[] = mockMaintenance.map((block) => ({
+      id: block.id,
+      title: `Maintenance: ${block.reason}`,
+      roomName: block.roomName,
+      date: block.startDateTime.slice(0, 10),
+      startTime: block.startDateTime.slice(11, 16),
+      endTime: block.endDateTime.slice(11, 16),
+      status: "maintenance",
+    }));
+    return wait([...bookingEvents, ...maintenanceEvents]);
+  }
 }
 
 export async function createMaintenanceBlock(payload: Partial<MaintenanceBlock>) {
-  return wait({ id: Date.now(), ...payload });
+  try {
+    return await apiRequest<{ ok: boolean; id: number }>("maintenance.php", {
+      method: "POST",
+      body: JSON.stringify({
+        room_id: payload.roomId,
+        start_datetime: payload.startDateTime,
+        end_datetime: payload.endDateTime,
+        reason: payload.reason,
+      }),
+    });
+  } catch {
+    return wait({ id: Date.now(), ...payload });
+  }
 }
 
 export async function getMaintenanceBlocks() {
-  return wait(mockMaintenance);
+  try {
+    const rows = await apiRequest<any[]>("maintenance.php");
+    return rows.map((row) => ({
+      id: Number(row.id),
+      roomId: Number(row.room_id),
+      roomName: row.room_name,
+      startDateTime: row.start_datetime,
+      endDateTime: row.end_datetime,
+      reason: row.reason || "Maintenance",
+    }));
+  } catch {
+    return wait(mockMaintenance);
+  }
 }
 
 export async function getIssues() {
-  return wait(mockIssues);
+  try {
+    const rows = await apiRequest<any[]>("issues.php");
+    return rows.map(toIssue);
+  } catch {
+    return wait(mockIssues);
+  }
 }
 
 export async function createIssue(payload: Partial<ClassroomIssue>) {
-  return wait({ id: Date.now(), status: "Open" as IssueStatus, comments: [], upvotes: 0, ...payload });
+  try {
+    const attachment = (payload as any).attachment as File | undefined;
+    if (attachment) {
+      const formData = new FormData();
+      formData.append("title", payload.title || "");
+      formData.append("room_name", payload.roomName || "");
+      formData.append("category", payload.category || "");
+      formData.append("description", payload.description || "");
+      formData.append("priority", payload.priority || "Medium");
+      formData.append("has_document", payload.hasDocument ? "1" : "0");
+      formData.append("is_affecting_booking", payload.isAffectingBooking ? "1" : "0");
+      if (payload.relatedBooking) formData.append("related_booking", payload.relatedBooking);
+      formData.append("attachment", attachment);
+      const issue = await apiFormRequest<any>("issues.php", formData);
+      return toIssue(issue);
+    }
+    const issue = await apiRequest<any>("issues.php", {
+      method: "POST",
+      body: JSON.stringify({
+        title: payload.title,
+        room_name: payload.roomName,
+        category: payload.category,
+        description: payload.description,
+        priority: payload.priority,
+        has_document: payload.hasDocument,
+        is_affecting_booking: payload.isAffectingBooking,
+        related_booking: payload.relatedBooking,
+      }),
+    });
+    return toIssue(issue);
+  } catch {
+    return wait({ id: Date.now(), status: "Open" as IssueStatus, comments: [], upvotes: 0, ...payload });
+  }
 }
 
 export async function getIssueById(id: number) {
-  return wait(mockIssues.find((issue) => issue.id === id) || null);
+  try {
+    const issue = await apiRequest<any>(`issues.php?id=${id}`);
+    return issue ? toIssue(issue) : null;
+  } catch {
+    return wait(mockIssues.find((issue) => issue.id === id) || null);
+  }
 }
 
 export async function addIssueComment(issueId: number, comment: string) {
-  return wait({ ok: true, issueId, comment });
+  try {
+    return await apiRequest<{ ok: boolean; id: number }>("issues.php", {
+      method: "POST",
+      body: JSON.stringify({ action: "comment", issue_id: issueId, message: comment }),
+    });
+  } catch {
+    return wait({ ok: true, issueId, comment });
+  }
 }
 
 export async function updateIssueStatus(issueId: number, status: IssueStatus, reason?: string) {
-  return wait({ ok: true, issueId, status, reason });
+  try {
+    return await apiRequest<{ ok: boolean }>("issues.php", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "status",
+        issue_id: issueId,
+        status,
+        reason: status === "Rejected" ? reason : undefined,
+        admin_response: status !== "Rejected" ? reason : undefined,
+      }),
+    });
+  } catch {
+    return wait({ ok: true, issueId, status, reason });
+  }
+}
+
+export async function upvoteIssue(issueId: number) {
+  try {
+    return await apiRequest<{ ok: boolean }>("issues.php", {
+      method: "POST",
+      body: JSON.stringify({ action: "upvote", issue_id: issueId }),
+    });
+  } catch {
+    return wait({ ok: true, issueId });
+  }
 }
 
 export async function createMaintenanceBlockFromIssue(issueId: number, payload: Partial<MaintenanceBlock>) {
-  return wait({ ok: true, issueId, maintenanceBlock: { id: Date.now(), ...payload } });
+  try {
+    return await apiRequest<{ ok: boolean; id: number }>("issues.php", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "maintenance_from_issue",
+        issue_id: issueId,
+        start_datetime: payload.startDateTime,
+        end_datetime: payload.endDateTime,
+        reason: payload.reason,
+      }),
+    });
+  } catch {
+    return wait({ ok: true, issueId, maintenanceBlock: { id: Date.now(), ...payload } });
+  }
+}
+
+export async function getNotifications() {
+  try {
+    const rows = await apiRequest<any[]>("notifications.php");
+    return rows.map(toNotification);
+  } catch {
+    return wait(mockNotifications);
+  }
+}
+
+export async function markNotificationRead(id: number) {
+  try {
+    return await apiRequest<{ ok: boolean }>("notifications.php", {
+      method: "POST",
+      body: JSON.stringify({ id }),
+    });
+  } catch {
+    return wait({ ok: true, id });
+  }
+}
+
+export async function markAllNotificationsRead() {
+  try {
+    return await apiRequest<{ ok: boolean }>("notifications.php", {
+      method: "POST",
+      body: JSON.stringify({ action: "read_all" }),
+    });
+  } catch {
+    return wait({ ok: true });
+  }
 }
 
 function priorityRank(role: UserRole) {

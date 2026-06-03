@@ -1,10 +1,12 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   MessageSquare, ThumbsUp, Plus, X, Search, Upload, AlertTriangle,
   Wrench, Monitor, Wind, Trash2, Armchair, Users, HelpCircle,
   CheckCircle, Clock, Eye, Send, ChevronDown, FileText, CalendarDays,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { addIssueComment, createIssue, getIssues, upvoteIssue } from "../services/classReserveService";
+import type { ClassroomIssue } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -212,6 +214,46 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 const inputCls = "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
 const borderStyle = { borderColor: "rgba(137,29,26,0.2)" } as const;
 
+function formatIssueDate(value: string) {
+  if (!value) return "Just now";
+  const date = new Date(value.replace(" ", "T"));
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function roleLabel(role: string) {
+  if (role === "faculty") return "Faculty";
+  if (role === "club") return "Club";
+  if (role === "admin") return "Admin";
+  return "Student";
+}
+
+function fromServiceIssue(issue: ClassroomIssue): Issue {
+  return {
+    id: issue.id,
+    title: issue.title,
+    room: issue.roomName,
+    category: issue.category,
+    description: issue.description,
+    postedBy: issue.postedBy,
+    userRole: roleLabel(issue.userRole),
+    date: formatIssueDate(issue.createdAt),
+    status: issue.status,
+    priority: issue.priority,
+    comments: issue.comments.map((comment) => ({
+      id: comment.id,
+      author: comment.authorName,
+      role: roleLabel(comment.authorRole),
+      time: formatIssueDate(comment.createdAt),
+      text: comment.message,
+    })),
+    upvotes: issue.upvotes,
+    hasDocument: Boolean(issue.hasDocument),
+    isAffectingBooking: Boolean(issue.isAffectingBooking),
+    relatedBooking: issue.relatedBooking,
+    adminResponse: issue.adminResponse,
+  };
+}
+
 export function Forum() {
   const { user } = useAuth();
 
@@ -223,6 +265,14 @@ export function Forum() {
   const [newComment, setNewComment] = useState("");
   const [upvoted, setUpvoted] = useState<Set<number>>(new Set());
 
+  useEffect(() => {
+    let mounted = true;
+    getIssues().then((items) => {
+      if (mounted) setIssues(items.map(fromServiceIssue));
+    });
+    return () => { mounted = false; };
+  }, []);
+
   // Create form state
   const [form, setForm] = useState({
     title: "",
@@ -233,6 +283,7 @@ export function Forum() {
     time: "",
     hasDocument: false,
     fileName: "",
+    attachment: null as File | null,
     isAffectingBooking: false,
     relatedBooking: "",
   });
@@ -262,6 +313,7 @@ export function Forum() {
   }, [issues, activeFilter, searchQuery, user]);
 
   const handleUpvote = (id: number) => {
+    void upvoteIssue(id);
     setUpvoted((prev) => {
       const next = new Set(prev);
       if (next.has(id)) { next.delete(id); setIssues((is) => is.map((i) => i.id === id ? { ...i, upvotes: i.upvotes - 1 } : i)); }
@@ -270,8 +322,9 @@ export function Forum() {
     });
   };
 
-  const handleAddComment = (issueId: number) => {
+  const handleAddComment = async (issueId: number) => {
     if (!newComment.trim()) return;
+    await addIssueComment(issueId, newComment.trim());
     const comment: Comment = {
       id: Date.now(),
       author: user?.name || "Anonymous",
@@ -284,7 +337,7 @@ export function Forum() {
     setNewComment("");
   };
 
-  const handleSubmitIssue = () => {
+  const handleSubmitIssue = async () => {
     if (!form.title.trim() || !form.room || !form.category || !form.description.trim()) {
       alert("Please fill all required fields.");
       return;
@@ -306,9 +359,24 @@ export function Forum() {
       relatedBooking: form.relatedBooking || undefined,
       comments: [],
     };
-    setIssues((prev) => [newIssue, ...prev]);
+    try {
+      const savedIssue = await createIssue({
+        title: form.title,
+        roomName: form.room,
+        category: form.category as IssueCategory,
+        description: form.description,
+      priority: "Medium",
+      hasDocument: !!form.fileName,
+      attachment: form.attachment,
+      isAffectingBooking: form.isAffectingBooking,
+      relatedBooking: form.relatedBooking || undefined,
+    });
+      setIssues((prev) => [fromServiceIssue(savedIssue as ClassroomIssue), ...prev]);
+    } catch {
+      setIssues((prev) => [newIssue, ...prev]);
+    }
     setCreateOpen(false);
-    setForm({ title: "", room: "", category: "", description: "", date: "", time: "", hasDocument: false, fileName: "", isAffectingBooking: false, relatedBooking: "" });
+    setForm({ title: "", room: "", category: "", description: "", date: "", time: "", hasDocument: false, fileName: "", attachment: null, isAffectingBooking: false, relatedBooking: "" });
   };
 
   const detailIssue = selectedIssue ? issues.find((i) => i.id === selectedIssue.id) || selectedIssue : null;
@@ -615,7 +683,7 @@ export function Forum() {
                 <div className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "rgba(59,110,74,0.06)", border: "1px solid rgba(59,110,74,0.2)" }}>
                   <FileText className="w-4 h-4" style={{ color: "#3B6E4A" }} />
                   <span className="text-sm flex-1 text-foreground">{form.fileName}</span>
-                  <button onClick={() => setForm((p) => ({ ...p, fileName: "" }))} style={{ color: "#891D1A" }}>
+                  <button onClick={() => setForm((p) => ({ ...p, fileName: "", attachment: null }))} style={{ color: "#891D1A" }}>
                     <X className="w-4 h-4" />
                   </button>
                 </div>
@@ -631,7 +699,10 @@ export function Forum() {
                   <input
                     type="file"
                     className="hidden"
-                    onChange={(e) => { if (e.target.files?.[0]) setForm((p) => ({ ...p, fileName: e.target.files![0].name })); }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) setForm((p) => ({ ...p, fileName: file.name, attachment: file }));
+                    }}
                   />
                 </label>
               )}

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, Clock, AlertTriangle, Bell, Info } from "lucide-react";
+import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../services/classReserveService";
+import type { Notification as AppNotification } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -56,14 +58,64 @@ const GROUPS: { key: Notif["group"]; label: string }[] = [
   { key: "earlier", label: "Earlier" },
 ];
 
+function groupForDate(value: string): Notif["group"] {
+  const date = new Date(value.replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return "earlier";
+  const now = new Date();
+  const diffDays = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+  if (diffDays < 1) return "today";
+  if (diffDays < 7) return "week";
+  return "earlier";
+}
+
+function timeLabel(value: string) {
+  const date = new Date(value.replace(" ", "T"));
+  if (Number.isNaN(date.getTime())) return value || "Recently";
+  const diffMs = Date.now() - date.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return date.toLocaleDateString();
+}
+
+function fromServiceNotification(notification: AppNotification): Notif {
+  return {
+    id: notification.id,
+    type: notification.type === "warning" || notification.type === "error" || notification.type === "success" || notification.type === "info" ? notification.type : "pending",
+    title: notification.title,
+    message: notification.message,
+    time: timeLabel(notification.createdAt),
+    unread: notification.unread,
+    group: groupForDate(notification.createdAt),
+  };
+}
+
 export function Notifications() {
   const [notifs, setNotifs] = useState<Notif[]>(initialNotifs);
 
+  useEffect(() => {
+    let mounted = true;
+    getNotifications().then((items) => {
+      if (mounted) setNotifs(items.map(fromServiceNotification));
+    });
+    return () => { mounted = false; };
+  }, []);
+
   const unreadCount = notifs.filter((n) => n.unread).length;
 
-  const markAllRead = () => setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
-  const markRead = (id: number) =>
+  const markAllRead = async () => {
+    await markAllNotificationsRead();
+    setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
+  };
+  const markRead = async (id: number) => {
+    await markNotificationRead(id);
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+  };
 
   return (
     <div className="space-y-5" style={DM_SANS}>
