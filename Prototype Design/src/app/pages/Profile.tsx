@@ -23,8 +23,8 @@ export function Profile() {
   const [firstName, setFirstName] = useState(user?.name?.split(" ")[0] || "");
   const [lastName, setLastName] = useState(user?.name?.split(" ").slice(1).join(" ") || "");
   const [email, setEmail] = useState(user?.email || "");
-  const [department, setDepartment] = useState("Computer Science");
-  const [studentId, setStudentId] = useState("CS-2024-0042");
+  const [department, setDepartment] = useState("");
+  const [studentId, setStudentId] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

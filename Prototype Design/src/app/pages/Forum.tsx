@@ -34,6 +34,8 @@ type Comment = {
 
 type Issue = {
   id: number;
+  postedById?: number | string;
+  postedByEmail?: string;
   title: string;
   room: string;
   category: IssueCategory;
@@ -230,6 +232,8 @@ function roleLabel(role: string) {
 function fromServiceIssue(issue: ClassroomIssue): Issue {
   return {
     id: issue.id,
+    postedById: issue.postedById,
+    postedByEmail: issue.postedByEmail,
     title: issue.title,
     room: issue.roomName,
     category: issue.category,
@@ -292,7 +296,14 @@ export function Forum() {
     let list = [...issues];
     // filter
     switch (activeFilter) {
-      case "my-posts": list = list.filter((i) => i.postedBy === (user?.name || "")); break;
+      case "my-posts":
+        list = list.filter((i) =>
+          Boolean(
+            (i.postedById && user?.id && String(i.postedById) === String(user.id)) ||
+            (i.postedByEmail && user?.email && i.postedByEmail.toLowerCase() === user.email.toLowerCase())
+          )
+        );
+        break;
       case "maintenance": list = list.filter((i) => i.category === "Maintenance Problem"); break;
       case "conflict": list = list.filter((i) => i.category === "Schedule Conflict"); break;
       case "equipment": list = list.filter((i) => i.category === "Projector/Equipment Issue"); break;
@@ -344,6 +355,8 @@ export function Forum() {
     }
     const newIssue: Issue = {
       id: Date.now(),
+      postedById: user?.id,
+      postedByEmail: user?.email,
       title: form.title,
       room: form.room,
       category: form.category as IssueCategory,
@@ -441,7 +454,9 @@ export function Forum() {
         {filteredIssues.length === 0 && (
           <div className="py-14 text-center bg-card rounded-xl shadow-sm">
             <MessageSquare className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
-            <p className="text-sm" style={{ color: "#5E657B" }}>No issues found.</p>
+            <p className="text-sm" style={{ color: "#5E657B" }}>
+              {activeFilter === "my-posts" ? "No forum posts yet." : "No issues found."}
+            </p>
           </div>
         )}
 

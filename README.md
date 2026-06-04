@@ -46,5 +46,6 @@ Public registration should be used for student or club accounts only. Faculty an
 - If your database does not have forum/report tables yet, run `db/update_issues.sql` once.
 - If you already ran `db/update_issues.sql` before issue attachments were added, run `db/update_issue_uploads.sql` once.
 - If your database does not have notifications yet, run `db/update_notifications.sql` once.
+- If your users table does not have account activation support yet, run `db/update_users_admin.sql` once.
 - Log in with one of the demo faculty/admin accounts above.
 - Add rooms, bookings, issue reports, and maintenance blocks for your local demo.

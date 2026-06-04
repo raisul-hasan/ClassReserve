@@ -4,7 +4,7 @@ import { getSession, loginWithApi, logoutWithApi, signupWithApi } from '../servi
 export type UserRole = 'student' | 'club' | 'faculty' | 'admin';
 
 export interface User {
-  id?: number;
+  id?: number | string;
   name: string;
   email: string;
   role: UserRole;
@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     await signupWithApi(name, email, password, role);
-    const newUser: User = { name, email, role };
+    const newUser: User = { id: `user-${Date.now()}`, name, email, role };
     localStorage.setItem('user', JSON.stringify(newUser));
   };
 

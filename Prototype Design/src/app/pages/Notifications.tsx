@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle, XCircle, Clock, AlertTriangle, Bell, Info } from "lucide-react";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../services/classReserveService";
 import type { Notification as AppNotification } from "../types/classReserve";
+import { useAuth } from "../context/AuthContext";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -96,15 +97,16 @@ function fromServiceNotification(notification: AppNotification): Notif {
 }
 
 export function Notifications() {
-  const [notifs, setNotifs] = useState<Notif[]>(initialNotifs);
+  const { user } = useAuth();
+  const [notifs, setNotifs] = useState<Notif[]>([]);
 
   useEffect(() => {
     let mounted = true;
-    getNotifications().then((items) => {
+    getNotifications({ role: user?.role, userId: user?.id, email: user?.email }).then((items) => {
       if (mounted) setNotifs(items.map(fromServiceNotification));
     });
     return () => { mounted = false; };
-  }, []);
+  }, [user?.role, user?.id, user?.email]);
 
   const unreadCount = notifs.filter((n) => n.unread).length;
 
@@ -138,6 +140,13 @@ export function Notifications() {
           </button>
         )}
       </div>
+
+      {notifs.length === 0 && (
+        <div className="py-14 text-center bg-card rounded-xl shadow-sm">
+          <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
+          <p className="text-sm" style={{ color: "#5E657B" }}>No notifications yet.</p>
+        </div>
+      )}
 
       <div className="space-y-6">
         {GROUPS.map((group) => {

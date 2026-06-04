@@ -31,29 +31,6 @@ function fetch_issue_comments($pdo, $issueId)
     return $stmt->fetchAll();
 }
 
-function save_uploaded_attachment($fieldName = 'attachment')
-{
-    if (empty($_FILES[$fieldName]) || $_FILES[$fieldName]['error'] !== UPLOAD_ERR_OK) {
-        return null;
-    }
-
-    $uploadsDir = __DIR__ . '/../public/uploads';
-    if (!is_dir($uploadsDir)) {
-        mkdir($uploadsDir, 0755, true);
-    }
-
-    $originalName = basename($_FILES[$fieldName]['name']);
-    $extension = pathinfo($originalName, PATHINFO_EXTENSION);
-    $newName = uniqid('issue_', true) . ($extension ? '.' . $extension : '');
-    $target = $uploadsDir . '/' . $newName;
-
-    if (!move_uploaded_file($_FILES[$fieldName]['tmp_name'], $target)) {
-        return null;
-    }
-
-    return 'uploads/' . $newName;
-}
-
 function issue_row($pdo, $row)
 {
     $row['comments'] = fetch_issue_comments($pdo, $row['id']);
@@ -111,7 +88,7 @@ $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
 $uploadedPath = null;
 if (stripos($contentType, 'multipart/form-data') !== false) {
     $input = $_POST;
-    $uploadedPath = save_uploaded_attachment();
+    $uploadedPath = save_uploaded_attachment('attachment', 'issue_');
 } else {
     $input = get_json_input();
 }
@@ -198,6 +175,12 @@ if ($action === 'maintenance_from_issue') {
     }
     if ($roomId <= 0) {
         json_response(['error' => 'Could not match this issue to a room.'], 422);
+    }
+    if (booking_conflict_exists($pdo, $roomId, $start, $end)) {
+        json_response(['error' => 'Cannot schedule maintenance over an existing pending or approved booking.'], 409);
+    }
+    if (maintenance_conflict_exists($pdo, $roomId, $start, $end)) {
+        json_response(['error' => 'Maintenance is already scheduled for this room during that time.'], 409);
     }
 
     $stmt = $pdo->prepare('INSERT INTO maintenance (room_id, start_datetime, end_datetime, reason) VALUES (?, ?, ?, ?)');

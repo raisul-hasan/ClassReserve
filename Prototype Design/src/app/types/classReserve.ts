@@ -2,6 +2,8 @@ export type UserRole = "student" | "club" | "faculty" | "admin";
 
 export type BookingStatus = "pending" | "approved" | "rejected" | "cancelled";
 export type BookingPriority = "standard" | "medium" | "high";
+export type CalendarEventType = "student_booking" | "club_event" | "faculty_reservation" | "maintenance";
+export type CalendarConflictStatus = "no_conflict" | "conflict_detected" | "maintenance_conflict";
 
 export type RoomStatus = "available" | "booked" | "maintenance" | "disabled";
 
@@ -20,6 +22,8 @@ export interface Room {
 
 export interface Booking {
   id: number;
+  requesterId?: number | string;
+  requesterEmail?: string;
   title: string;
   requesterName: string;
   requesterRole: UserRole;
@@ -49,15 +53,23 @@ export interface CalendarEvent {
   id: number;
   title: string;
   roomName: string;
+  requesterName: string;
+  requesterRole: UserRole;
+  requesterId?: number;
+  requesterEmail?: string;
+  eventType: CalendarEventType;
   date: string;
   startTime: string;
   endTime: string;
   status: BookingStatus | "maintenance";
+  priority: BookingPriority;
+  conflictStatus: CalendarConflictStatus;
   ownerRole?: UserRole;
 }
 
 export interface Notification {
   id: number;
+  userId?: number | string;
   title: string;
   message: string;
   type: "success" | "warning" | "error" | "info";
@@ -87,6 +99,8 @@ export interface IssueComment {
 
 export interface ClassroomIssue {
   id: number;
+  postedById?: number | string;
+  postedByEmail?: string;
   title: string;
   roomName: string;
   category: IssueCategory;

@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { getCalendarEvents } from "../services/classReserveService";
-import type { CalendarEvent } from "../types/classReserve";
+import { useAuth } from "../context/AuthContext";
+import type { CalendarConflictStatus, CalendarEvent, CalendarEventType } from "../types/classReserve";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 type ViewMode = "month" | "week" | "day";
-type FilterType = "all" | "faculty" | "club" | "student" | "maintenance";
+type FilterType = "all" | "faculty" | "club" | "student" | "maintenance" | "mine" | "pending" | "approved";
 
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -18,32 +19,9 @@ const FILTER_PILLS: { key: FilterType; label: string }[] = [
   { key: "club", label: "Club Events" },
   { key: "student", label: "Student Bookings" },
   { key: "maintenance", label: "Maintenance" },
-];
-
-type CalendarUiEvent = {
-  id: number;
-  title: string;
-  room: string;
-  date: string;
-  type: FilterType;
-  time: string;
-  status: string;
-  priority: string;
-};
-
-const initialEvents: CalendarUiEvent[] = [
-  { id: 1, title: "Math 101", room: "A-301", date: "2026-04-01", type: "faculty", time: "10:00 AM", status: "approved", priority: "HIGH" },
-  { id: 2, title: "Club Meeting", room: "B-205", date: "2026-04-01", type: "club", time: "2:00 PM", status: "pending", priority: "MEDIUM" },
-  { id: 3, title: "Physics Lab", room: "C-105", date: "2026-04-02", type: "faculty", time: "9:00 AM", status: "approved", priority: "HIGH" },
-  { id: 4, title: "Study Group", room: "A-301", date: "2026-04-02", type: "student", time: "3:00 PM", status: "pending", priority: "STANDARD" },
-  { id: 5, title: "CS Lecture", room: "D-202", date: "2026-04-03", type: "faculty", time: "11:00 AM", status: "approved", priority: "HIGH" },
-  { id: 6, title: "Workshop", room: "D-202", date: "2026-04-03", type: "club", time: "2:00 PM", status: "approved", priority: "MEDIUM" },
-  { id: 7, title: "Research Seminar", room: "Aud-B", date: "2026-04-03", type: "faculty", time: "2:00 PM", status: "approved", priority: "HIGH" },
-  { id: 8, title: "Guest Lecture", room: "Aud-B", date: "2026-04-04", type: "faculty", time: "2:00 PM", status: "approved", priority: "HIGH" },
-  { id: 9, title: "Maintenance", room: "D-202", date: "2026-04-10", type: "maintenance", time: "All day", status: "maintenance", priority: "" },
-  { id: 10, title: "Tutorial", room: "E-101", date: "2026-04-05", type: "student", time: "4:00 PM", status: "approved", priority: "STANDARD" },
-  { id: 11, title: "Dance Practice", room: "E-101", date: "2026-04-05", type: "club", time: "6:00 PM", status: "pending", priority: "MEDIUM" },
-  { id: 12, title: "Department Meeting", room: "A-301", date: "2026-04-06", type: "faculty", time: "10:00 AM", status: "approved", priority: "HIGH" },
+  { key: "mine", label: "My Bookings" },
+  { key: "pending", label: "Pending" },
+  { key: "approved", label: "Approved" },
 ];
 
 function timeLabel(event: CalendarEvent) {
@@ -51,27 +29,39 @@ function timeLabel(event: CalendarEvent) {
   return `${event.startTime || "--"} - ${event.endTime || "--"}`;
 }
 
-function toUiEvent(event: CalendarEvent): CalendarUiEvent {
-  const type = event.status === "maintenance" ? "maintenance" : (event.ownerRole || "student");
-  return {
-    id: event.id,
-    title: event.title,
-    room: event.roomName,
-    date: event.date,
-    type,
-    time: timeLabel(event),
-    status: event.status,
-    priority: type === "faculty" ? "HIGH" : type === "club" ? "MEDIUM" : type === "student" ? "STANDARD" : "",
-  };
+function eventFilterType(event: CalendarEvent): Exclude<FilterType, "all" | "mine" | "pending" | "approved"> {
+  if (event.eventType === "maintenance") return "maintenance";
+  if (event.eventType === "faculty_reservation") return "faculty";
+  if (event.eventType === "club_event") return "club";
+  return "student";
 }
 
-function eventChipColor(type: string) {
+function eventTypeLabel(type: CalendarEventType) {
   switch (type) {
-    case "faculty": return { bg: "#891D1A", text: "#fff" };
-    case "club": return { bg: "#5E657B", text: "#fff" };
-    case "student": return { bg: "#B8860B", text: "#fff" };
-    case "maintenance": return { bg: "#210706", text: "#F1E6D2" };
-    default: return { bg: "#5E657B", text: "#fff" };
+    case "faculty_reservation": return "Faculty Reservation";
+    case "club_event": return "Club Event";
+    case "student_booking": return "Student Booking";
+    case "maintenance": return "Maintenance";
+  }
+}
+
+function conflictLabel(status: CalendarConflictStatus) {
+  switch (status) {
+    case "conflict_detected": return "Conflict detected";
+    case "maintenance_conflict": return "Maintenance conflict";
+    default: return "No conflict";
+  }
+}
+
+function eventChipColor(event: CalendarEvent) {
+  const type = eventFilterType(event);
+  if (event.conflictStatus === "conflict_detected") return { bg: "#B8860B", text: "#fff", border: "#6F4E00" };
+  if (event.status === "pending") return { bg: "#F1E6D2", text: "#891D1A", border: "#B8860B" };
+  switch (type) {
+    case "faculty": return { bg: "#891D1A", text: "#fff", border: "#891D1A" };
+    case "club": return { bg: "#5E657B", text: "#fff", border: "#5E657B" };
+    case "student": return { bg: "#B8860B", text: "#fff", border: "#B8860B" };
+    case "maintenance": return { bg: "#210706", text: "#F1E6D2", border: "#210706" };
   }
 }
 
@@ -94,22 +84,23 @@ function getFirstDayOfMonth(year: number, month: number) {
 
 export function Calendar() {
   const today = new Date();
-  const [events, setEvents] = useState<CalendarUiEvent[]>(initialEvents);
+  const { user } = useAuth();
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("month");
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [currentYear, setCurrentYear] = useState(2026);
+  const [currentMonth, setCurrentMonth] = useState(5);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
-  const [selectedEvent, setSelectedEvent] = useState<CalendarUiEvent | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
 
   useEffect(() => {
     let mounted = true;
-    getCalendarEvents().then((items) => {
-      if (mounted) setEvents(items.map(toUiEvent));
+    getCalendarEvents({ role: user?.role, userId: user?.id, email: user?.email }).then((items) => {
+      if (mounted) setEvents(items);
     });
     return () => { mounted = false; };
-  }, []);
+  }, [user?.role, user?.id, user?.email]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -127,9 +118,30 @@ export function Calendar() {
   const dayStr = (day: number) =>
     `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 
-  const filteredEvents = activeFilter === "all"
-    ? events
-    : events.filter((e) => e.type === activeFilter);
+  const isOwnEvent = (event: CalendarEvent) => {
+    if (!user) return false;
+    return Boolean(
+      (event.requesterId && user.id && event.requesterId === user.id) ||
+      (event.requesterEmail && event.requesterEmail.toLowerCase() === user.email.toLowerCase())
+    );
+  };
+
+  const isRoleVisible = (event: CalendarEvent) => {
+    if (!user || user.role === "admin") return true;
+    if (event.status === "maintenance" || event.status === "approved") return true;
+    if (isOwnEvent(event) && event.status === "pending") return true;
+    if (user.role === "faculty" && event.status === "pending" && ["student", "club"].includes(event.requesterRole)) return true;
+    return false;
+  };
+
+  const filteredEvents = events.filter((event) => {
+    if (!isRoleVisible(event)) return false;
+    if (activeFilter === "all") return true;
+    if (activeFilter === "mine") return isOwnEvent(event);
+    if (activeFilter === "pending") return event.status === "pending";
+    if (activeFilter === "approved") return event.status === "approved";
+    return eventFilterType(event) === activeFilter;
+  });
 
   const eventsForDay = (day: number) => filteredEvents.filter((e) => e.date === dayStr(day));
 
@@ -141,7 +153,7 @@ export function Calendar() {
     setDrawerOpen(true);
   };
 
-  const handleEventClick = (ev: CalendarUiEvent, e: React.MouseEvent) => {
+  const handleEventClick = (ev: CalendarEvent, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedEvent(ev);
   };
@@ -279,15 +291,16 @@ export function Calendar() {
                 </div>
                 <div className="space-y-0.5">
                   {dayEvents.slice(0, 2).map((ev) => {
-                    const c = eventChipColor(ev.type);
+                    const c = eventChipColor(ev);
                     return (
                       <div
                         key={ev.id}
-                        className="text-xs px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80 transition-opacity"
-                        style={{ background: c.bg, color: c.text }}
+                        className="text-xs px-1.5 py-0.5 rounded truncate cursor-pointer hover:opacity-80 transition-opacity border"
+                        style={{ background: c.bg, color: c.text, borderColor: c.border }}
                         onClick={(e) => handleEventClick(ev, e)}
+                        title={`${timeLabel(ev)} ${ev.title} - ${ev.roomName}`}
                       >
-                        {ev.title}
+                        <span className="font-semibold">{ev.startTime}</span> {ev.title} · {ev.roomName}
                       </div>
                     );
                   })}
@@ -336,44 +349,60 @@ export function Calendar() {
                 </button>
                 <div
                   className="rounded-xl p-4 space-y-3"
-                  style={{ background: eventChipColor(selectedEvent.type).bg + "10", border: `1px solid ${eventChipColor(selectedEvent.type).bg}30` }}
+                  style={{ background: eventChipColor(selectedEvent).bg + "10", border: `1px solid ${eventChipColor(selectedEvent).border}30` }}
                 >
                   <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Title</p>
+                    <p className="text-sm font-semibold text-foreground">{selectedEvent.title}</p>
+                  </div>
+                  <div>
                     <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Room</p>
-                    <p className="text-sm font-semibold text-foreground">{selectedEvent.room}</p>
+                    <p className="text-sm font-semibold text-foreground">{selectedEvent.roomName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Requester</p>
+                    <p className="text-sm text-foreground">{selectedEvent.requesterName}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Requester Role</p>
+                    <p className="text-sm text-foreground capitalize">{selectedEvent.requesterRole}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Date</p>
+                    <p className="text-sm text-foreground">{selectedEvent.date}</p>
                   </div>
                   <div>
                     <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Time</p>
-                    <p className="text-sm text-foreground">{selectedEvent.time}</p>
+                    <p className="text-sm text-foreground">{timeLabel(selectedEvent)}</p>
                   </div>
                   <div>
                     <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Type</p>
                     <span
-                      className="inline-block text-xs px-2 py-0.5 rounded-full text-white capitalize"
-                      style={{ background: eventChipColor(selectedEvent.type).bg }}
+                      className="inline-block text-xs px-2 py-0.5 rounded-full text-white"
+                      style={{ background: eventChipColor(selectedEvent).border }}
                     >
-                      {selectedEvent.type}
+                      {eventTypeLabel(selectedEvent.eventType)}
                     </span>
                   </div>
-                  {selectedEvent.status && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Status</p>
-                      <span
-                        className="inline-block text-xs px-2 py-0.5 rounded-full text-white"
-                        style={{ background: statusLabel(selectedEvent.status).color }}
-                      >
-                        {statusLabel(selectedEvent.status).label}
-                      </span>
-                    </div>
-                  )}
-                  {selectedEvent.priority && (
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Priority</p>
-                      <p className="text-sm font-semibold" style={{ color: eventChipColor(selectedEvent.type).bg }}>
-                        {selectedEvent.priority}
-                      </p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Status</p>
+                    <span
+                      className="inline-block text-xs px-2 py-0.5 rounded-full text-white"
+                      style={{ background: statusLabel(selectedEvent.status).color }}
+                    >
+                      {statusLabel(selectedEvent.status).label}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Priority</p>
+                    <p className="text-sm font-semibold capitalize" style={{ color: eventChipColor(selectedEvent).border }}>
+                      {selectedEvent.priority}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Conflict Status</p>
+                    <p className="text-sm text-foreground">{conflictLabel(selectedEvent.conflictStatus)}</p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -385,24 +414,24 @@ export function Calendar() {
                   </div>
                 ) : (
                   selectedEvents.map((ev) => {
-                    const c = eventChipColor(ev.type);
+                    const c = eventChipColor(ev);
                     const sl = statusLabel(ev.status);
                     return (
                       <div
                         key={ev.id}
                         className="rounded-xl p-4 cursor-pointer hover:opacity-90 transition-opacity"
-                        style={{ background: c.bg + "12", borderLeft: `3px solid ${c.bg}` }}
+                        style={{ background: c.bg + "12", borderLeft: `3px solid ${c.border}` }}
                         onClick={() => setSelectedEvent(ev)}
                       >
                         <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>{ev.title}</p>
-                        <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>Room {ev.room}</p>
-                        <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>{ev.time}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>Room {ev.roomName}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>{timeLabel(ev)}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span
                             className="inline-block text-xs px-2 py-0.5 rounded-full text-white capitalize"
-                            style={{ background: c.bg }}
+                            style={{ background: c.border }}
                           >
-                            {ev.type}
+                            {eventTypeLabel(ev.eventType)}
                           </span>
                           <span
                             className="inline-block text-xs px-2 py-0.5 rounded-full text-white"
@@ -412,8 +441,13 @@ export function Calendar() {
                           </span>
                         </div>
                         {ev.priority && (
-                          <p className="text-xs mt-1.5 font-semibold" style={{ color: c.bg }}>
+                          <p className="text-xs mt-1.5 font-semibold capitalize" style={{ color: c.border }}>
                             Priority: {ev.priority}
+                          </p>
+                        )}
+                        {ev.conflictStatus !== "no_conflict" && (
+                          <p className="text-xs mt-1 font-semibold" style={{ color: "#B8860B" }}>
+                            {conflictLabel(ev.conflictStatus)}
                           </p>
                         )}
                       </div>

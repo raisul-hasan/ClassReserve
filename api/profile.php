@@ -6,7 +6,7 @@ $user = require_login();
 
 function profile_user_response($pdo, $userId)
 {
-    $stmt = $pdo->prepare('SELECT id, name, email, role FROM users WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT id, name, email, role, is_active FROM users WHERE id = ?');
     $stmt->execute([$userId]);
     $row = $stmt->fetch();
     if (!$row) {
@@ -18,6 +18,7 @@ function profile_user_response($pdo, $userId)
         'name' => $row['name'],
         'email' => $row['email'],
         'role' => $row['role'],
+        'is_active' => (bool) $row['is_active'],
     ];
 }
 

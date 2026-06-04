@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { Check, X, Clock, AlertCircle, Users, ChevronRight, Plus, Calendar } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { getMyBookings } from "../services/classReserveService";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -55,8 +57,22 @@ const calendarBookings = [
 
 export function FacultyDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [pendingRequests, setPendingRequests] = useState<RequestItem[]>(initialRequests);
-  const [reservations, setReservations] = useState<Reservation[]>(initialReservations);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+
+  useEffect(() => {
+    getMyBookings({ role: "faculty", userId: user?.id, email: user?.email })
+      .then((items) => setReservations(items.map((item) => ({
+        id: item.id,
+        room: item.roomName,
+        course: item.title,
+        date: item.date,
+        time: `${item.startTime} - ${item.endTime}`,
+        recurring: item.status === "approved" ? "Approved" : item.status,
+      }))))
+      .catch(() => setReservations([]));
+  }, [user?.id, user?.email]);
 
   const handleApprove = (id: number) => {
     const item = pendingRequests.find((r) => r.id === id);
@@ -290,6 +306,11 @@ export function FacultyDashboard() {
             {/* Reservations */}
             <div className="mt-5 space-y-2">
               <p className="text-xs font-semibold" style={{ color: "#5E657B" }}>MY CLASSES</p>
+              {reservations.length === 0 && (
+                <div className="py-5 text-center text-sm" style={{ color: "#5E657B" }}>
+                  No recent activity yet.
+                </div>
+              )}
               {reservations.slice(0, 3).map((r) => (
                 <div
                   key={r.id}

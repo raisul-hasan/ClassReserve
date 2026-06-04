@@ -5,7 +5,8 @@ require_once __DIR__ . '/helpers.php';
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
-    json_response(['ok' => true, 'user' => current_user()]);
+    $user = current_user();
+    json_response(['ok' => true, 'user' => $user ? require_login() : null]);
 }
 
 if ($method !== 'POST') {
@@ -56,9 +57,13 @@ if ($action === 'login') {
         json_response(['error' => 'Email and password are required.'], 400);
     }
 
-    $stmt = $pdo->prepare('SELECT id, password_hash, role, name, email FROM users WHERE email = ?');
+    $stmt = $pdo->prepare('SELECT id, password_hash, role, name, email, is_active FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
+
+    if ($user && !(bool) $user['is_active']) {
+        json_response(['error' => 'This account has been deactivated.'], 403);
+    }
 
     if ($user && password_verify($password, $user['password_hash'])) {
         session_regenerate_id(true);
@@ -66,6 +71,7 @@ if ($action === 'login') {
         $_SESSION['role'] = $user['role'];
         $_SESSION['name'] = $user['name'];
         $_SESSION['email'] = $user['email'];
+        $_SESSION['is_active'] = (bool) $user['is_active'];
         json_response([
             'ok' => true,
             'message' => 'Login successful.',
@@ -74,6 +80,7 @@ if ($action === 'login') {
                 'name' => $user['name'],
                 'email' => $user['email'],
                 'role' => $user['role'],
+                'is_active' => (bool) $user['is_active'],
             ],
         ]);
     }

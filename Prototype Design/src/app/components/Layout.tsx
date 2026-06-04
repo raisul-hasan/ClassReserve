@@ -89,10 +89,10 @@ export function Layout() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    getNotifications()
+    getNotifications({ role: user?.role, userId: user?.id, email: user?.email })
       .then((items) => setUnreadCount(items.filter((item) => item.unread).length))
       .catch(() => setUnreadCount(0));
-  }, [user?.id]);
+  }, [user?.role, user?.id, user?.email]);
 
   const handleLogout = () => {
     logout();

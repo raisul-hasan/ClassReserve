@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Users, CheckCircle, XCircle, Clock, Plus, BookOpen, ChevronRight } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { getMyBookings, getNotifications } from "../services/classReserveService";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -57,8 +59,33 @@ function statusBorderColor(status: BookingStatus) {
 
 export function StudentDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"all" | BookingStatus>("all");
-  const [bookings] = useState<Booking[]>(initialBookings);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [userNotifications, setUserNotifications] = useState(notifications.slice(0, 0));
+
+  useEffect(() => {
+    getMyBookings({ role: user?.role || "student", userId: user?.id, email: user?.email })
+      .then((items) => setBookings(items.map((item) => ({
+        id: item.id,
+        room: item.roomName,
+        building: item.building || "Campus",
+        event: item.title,
+        date: item.date,
+        time: `${item.startTime} - ${item.endTime}`,
+        status: item.status as BookingStatus,
+      }))))
+      .catch(() => setBookings([]));
+
+    getNotifications({ role: user?.role, userId: user?.id, email: user?.email })
+      .then((items) => setUserNotifications(items.map((item) => ({
+        id: item.id,
+        type: item.type === "success" ? "success" : item.type === "error" ? "error" : "pending",
+        message: item.message,
+        time: item.createdAt || "Recently",
+      }))))
+      .catch(() => setUserNotifications([]));
+  }, [user?.role, user?.id, user?.email]);
 
   const filteredBookings = useMemo(() => {
     if (activeTab === "all") return bookings;
@@ -233,7 +260,12 @@ export function StudentDashboard() {
             </h3>
           </div>
           <div className="p-4 space-y-3">
-            {notifications.map((n) => {
+            {userNotifications.length === 0 && (
+              <div className="py-8 text-center text-sm" style={{ color: "#5E657B" }}>
+                No notifications yet.
+              </div>
+            )}
+            {userNotifications.map((n) => {
               const icon =
                 n.type === "success" ? (
                   <CheckCircle className="w-5 h-5" style={{ color: "#3B6E4A" }} />

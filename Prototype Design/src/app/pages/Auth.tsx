@@ -16,9 +16,16 @@ export function Auth() {
   const navigate = useNavigate();
   const { login, signup, user } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+  const authText = isDark ? "#F8F1E7" : "#210706";
+  const authMuted = isDark ? "#D8C9B6" : "#5E657B";
+  const authCardBg = isDark ? "#120807" : "#FFFFFF";
+  const authPanelBg = isDark ? "#210706" : "#F1E6D2";
 
   const [selectedRole, setSelectedRole] = useState<UserRole>("student");
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
+  const signupNameLabel = selectedRole === "club" ? "Club Name" : "Full Name";
+  const signupNamePlaceholder = selectedRole === "club" ? "Computing Club" : "Jane Doe";
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -155,12 +162,12 @@ export function Auth() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[#F1E6D2] dark:bg-[#210706] transition-colors relative">
+      <div className="flex-1 flex flex-col items-center justify-center p-6 transition-colors relative" style={{ background: authPanelBg }}>
         {/* Theme toggle */}
         <button
           onClick={toggleTheme}
           className="absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10 transition-colors"
-          style={{ color: "#5E657B" }}
+          style={{ color: authMuted }}
         >
           {theme === "light" ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
         </button>
@@ -181,19 +188,19 @@ export function Auth() {
         {/* Card */}
         <div
           className="w-full max-w-md rounded-xl shadow-lg p-8"
-          style={{ background: "#FFFFFF", boxShadow: "0 4px 24px rgba(33,7,6,0.10)" }}
+          style={{ background: authCardBg, boxShadow: "0 4px 24px rgba(33,7,6,0.22)" }}
         >
           <h2
-            className="text-2xl text-[#210706] mb-1"
-            style={{ ...PLAYFAIR, fontWeight: 600 }}
+            className="text-2xl mb-1"
+            style={{ ...PLAYFAIR, fontWeight: 600, color: authText }}
           >
             Welcome back
           </h2>
-          <p className="text-sm text-[#5E657B] mb-6">Sign in to manage your reservations</p>
+          <p className="text-sm mb-6" style={{ color: authMuted }}>Sign in to manage your reservations</p>
 
           {/* Role selector */}
           <div className="mb-6">
-            <Label className="text-sm text-[#5E657B] mb-2 block">Sign in as</Label>
+            <Label className="text-sm mb-2 block" style={{ color: authMuted }}>Sign in as</Label>
             <div className="flex gap-2">
               {(["student", "club", "faculty", "admin"] as UserRole[]).map((role) => (
                 <button
@@ -203,7 +210,7 @@ export function Auth() {
                   style={
                     selectedRole === role
                       ? { background: "#891D1A", color: "#F1E6D2", border: "1px solid #891D1A" }
-                      : { background: "transparent", color: "#5E657B", border: "1px solid #5E657B" }
+                      : { background: "transparent", color: authMuted, border: `1px solid ${authMuted}` }
                   }
                 >
                   {role}
@@ -238,7 +245,7 @@ export function Auth() {
               style={
                 activeTab === "login"
                   ? { color: "#891D1A", borderColor: "#891D1A" }
-                  : { color: "#5E657B", borderColor: "transparent" }
+                  : { color: authMuted, borderColor: "transparent" }
               }
             >
               Sign In
@@ -251,8 +258,8 @@ export function Auth() {
                 activeTab === "signup"
                   ? { color: "#891D1A", borderColor: "#891D1A" }
                   : selectedRole === "admin" || selectedRole === "faculty"
-                    ? { color: "#5E657B", opacity: 0.4, borderColor: "transparent" }
-                    : { color: "#5E657B", borderColor: "transparent" }
+                    ? { color: authMuted, opacity: 0.4, borderColor: "transparent" }
+                    : { color: authMuted, borderColor: "transparent" }
               }
             >
               Create Account
@@ -262,7 +269,7 @@ export function Auth() {
           {activeTab === "login" && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="login-email" className="text-sm text-[#5E657B]">Email</Label>
+                <Label htmlFor="login-email" className="text-sm" style={{ color: authMuted }}>Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
@@ -278,7 +285,7 @@ export function Auth() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="login-password" className="text-sm text-[#5E657B]">Password</Label>
+                <Label htmlFor="login-password" className="text-sm" style={{ color: authMuted }}>Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
@@ -315,7 +322,7 @@ export function Auth() {
                 {isSubmitting ? "Signing in..." : "Sign In"}
               </button>
 
-              <p className="text-center text-sm text-[#5E657B]">
+              <p className="text-center text-sm" style={{ color: authMuted }}>
                 Don't have an account?{" "}
                 <button
                   type="button"
@@ -332,13 +339,13 @@ export function Auth() {
           {activeTab === "signup" && (
             <form onSubmit={handleSignup} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="signup-name" className="text-sm text-[#5E657B]">Full Name</Label>
+                <Label htmlFor="signup-name" className="text-sm" style={{ color: authMuted }}>{signupNameLabel}</Label>
                 <div className="relative">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
                     id="signup-name"
                     type="text"
-                    placeholder="Jane Doe"
+                    placeholder={signupNamePlaceholder}
                     className={`${inputCls} ${darkInputCls}`}
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
@@ -348,7 +355,7 @@ export function Auth() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="signup-email" className="text-sm text-[#5E657B]">Email</Label>
+                <Label htmlFor="signup-email" className="text-sm" style={{ color: authMuted }}>Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
@@ -364,7 +371,7 @@ export function Auth() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="signup-password" className="text-sm text-[#5E657B]">Password</Label>
+                <Label htmlFor="signup-password" className="text-sm" style={{ color: authMuted }}>Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
@@ -380,7 +387,7 @@ export function Auth() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="signup-confirm" className="text-sm text-[#5E657B]">Confirm Password</Label>
+                <Label htmlFor="signup-confirm" className="text-sm" style={{ color: authMuted }}>Confirm Password</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#5E657B]" />
                   <Input
@@ -397,10 +404,10 @@ export function Auth() {
 
               <div
                 className="p-3 rounded-lg text-sm"
-                style={{ background: "rgba(94,101,123,0.08)", color: "#5E657B" }}
+                style={{ background: isDark ? "rgba(241,230,210,0.08)" : "rgba(94,101,123,0.08)", color: authMuted }}
               >
                 Registering as:{" "}
-                <span className="font-semibold text-[#210706] capitalize">{selectedRole}</span>
+                <span className="font-semibold capitalize" style={{ color: authText }}>{selectedRole}</span>
               </div>
 
               <button
@@ -414,7 +421,7 @@ export function Auth() {
                 {isSubmitting ? "Creating..." : "Create Account"}
               </button>
 
-              <p className="text-center text-sm text-[#5E657B]">
+              <p className="text-center text-sm" style={{ color: authMuted }}>
                 Already have an account?{" "}
                 <button
                   type="button"

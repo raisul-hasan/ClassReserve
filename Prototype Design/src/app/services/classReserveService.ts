@@ -2,6 +2,8 @@ import {
   Booking,
   BookingStatus,
   CalendarEvent,
+  CalendarConflictStatus,
+  CalendarEventType,
   ClassroomIssue,
   IssueStatus,
   MaintenanceBlock,
@@ -12,11 +14,19 @@ import {
 } from "../types/classReserve";
 
 export type ApiUser = {
-  id?: number;
+  id?: number | string;
   name: string;
   email: string;
   role: UserRole;
 };
+
+export type UserScopedOptions = {
+  role?: UserRole;
+  userId?: number | string;
+  email?: string;
+};
+
+export type CalendarEventOptions = UserScopedOptions;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost/classreserve/api";
 
@@ -73,6 +83,8 @@ function toBooking(row: any): Booking {
 
   return {
     id: Number(row.id),
+    requesterId: row.user_id ? Number(row.user_id) : row.requesterId,
+    requesterEmail: row.user_email || row.requesterEmail,
     title: row.title || "Room Booking",
     requesterName: row.user_name || "Requester",
     requesterRole,
@@ -85,13 +97,65 @@ function toBooking(row: any): Booking {
     priority: row.priority >= 3 ? "high" : row.priority >= 2 ? "medium" : "standard",
     status: row.status || "pending",
     hasDocument: Boolean(row.uploaded_path),
-    conflictStatus: "clear",
+    conflictStatus: row.conflict_status || "clear",
+  };
+}
+
+function eventTypeForRole(role: UserRole): CalendarEventType {
+  if (role === "faculty") return "faculty_reservation";
+  if (role === "club") return "club_event";
+  return "student_booking";
+}
+
+function eventConflictStatus(value?: string): CalendarConflictStatus {
+  if (value === "conflict" || value === "conflict_detected") return "conflict_detected";
+  if (value === "maintenance" || value === "maintenance_conflict") return "maintenance_conflict";
+  return "no_conflict";
+}
+
+function toCalendarEventFromBooking(booking: Booking, index = 0): CalendarEvent {
+  return {
+    id: booking.id,
+    title: booking.title,
+    roomName: booking.roomName,
+    requesterName: booking.requesterName,
+    requesterRole: booking.requesterRole,
+    requesterId: (booking as any).requesterId,
+    requesterEmail: (booking as any).requesterEmail,
+    eventType: eventTypeForRole(booking.requesterRole),
+    date: booking.date,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    status: booking.status,
+    priority: booking.priority,
+    conflictStatus: eventConflictStatus(booking.conflictStatus),
+    ownerRole: booking.requesterRole,
+  };
+}
+
+function toCalendarEventFromMaintenance(block: MaintenanceBlock, index = 0): CalendarEvent {
+  return {
+    id: 100000 + Number(block.id || index),
+    title: block.reason,
+    roomName: block.roomName,
+    requesterName: "Facilities Team",
+    requesterRole: "admin",
+    eventType: "maintenance",
+    date: block.startDateTime.slice(0, 10),
+    startTime: block.startDateTime.slice(11, 16),
+    endTime: block.endDateTime.slice(11, 16),
+    status: "maintenance",
+    priority: "high",
+    conflictStatus: "maintenance_conflict",
+    ownerRole: "admin",
   };
 }
 
 function toIssue(row: any): ClassroomIssue {
   return {
     id: Number(row.id),
+    postedById: row.user_id ? Number(row.user_id) : row.postedById,
+    postedByEmail: row.user_email || row.postedByEmail,
     title: row.title,
     roomName: row.room_name || row.roomName,
     category: row.category,
@@ -121,6 +185,7 @@ function toIssue(row: any): ClassroomIssue {
 function toNotification(row: any): Notification {
   return {
     id: Number(row.id),
+    userId: row.user_id ? Number(row.user_id) : row.userId,
     title: row.title,
     message: row.message,
     type: row.type || "info",
@@ -138,18 +203,134 @@ const mockRooms: Room[] = [
 ];
 
 const mockBookings: Booking[] = [
-  { id: 1, title: "Software Engineering Extra Class", requesterName: "Dr. Sarah Johnson", requesterRole: "faculty", roomName: "Room A-301", building: "Building A", date: "2026-06-08", startTime: "10:00", endTime: "11:30", attendees: 42, priority: "high", status: "approved", hasDocument: false, conflictStatus: "clear" },
-  { id: 2, title: "Computing Club Workshop", requesterName: "Computing Club", requesterRole: "club", roomName: "Lab C-107", building: "Building C", date: "2026-06-09", startTime: "14:00", endTime: "16:00", attendees: 55, priority: "medium", status: "pending", hasDocument: true, conflictStatus: "clear" },
-  { id: 3, title: "Project Presentation Practice", requesterName: "Michael Chen", requesterRole: "student", roomName: "Room A-302", building: "Building A", date: "2026-06-10", startTime: "13:00", endTime: "14:00", attendees: 8, priority: "standard", status: "rejected", hasDocument: false, conflictStatus: "conflict", rejectionReason: "Overlaps with approved faculty reservation." },
+  { id: 1, requesterId: 2, requesterEmail: "sarah.johnson@classreserve.test", title: "Software Engineering Extra Class", requesterName: "Dr. Sarah Johnson", requesterRole: "faculty", roomName: "Room A-301", building: "Building A", date: "2026-06-08", startTime: "10:00", endTime: "11:30", attendees: 42, priority: "high", status: "approved", hasDocument: false, conflictStatus: "clear" },
+  { id: 2, requesterId: "demo-club", requesterEmail: "programming.club@uni.edu", title: "Computing Club Workshop", requesterName: "Computing Club", requesterRole: "club", roomName: "Lab C-107", building: "Building C", date: "2026-06-09", startTime: "14:00", endTime: "16:00", attendees: 55, priority: "medium", status: "pending", hasDocument: true, conflictStatus: "clear" },
+  { id: 3, requesterId: "demo-student", requesterEmail: "student@classreserve.test", title: "Project Presentation Practice", requesterName: "Michael Chen", requesterRole: "student", roomName: "Room A-302", building: "Building A", date: "2026-06-10", startTime: "13:00", endTime: "14:00", attendees: 8, priority: "standard", status: "rejected", hasDocument: false, conflictStatus: "conflict", rejectionReason: "Overlaps with approved faculty reservation." },
 ];
 
 const mockMaintenance: MaintenanceBlock[] = [
   { id: 1, roomId: 4, roomName: "Room D-202", startDateTime: "2026-06-11 09:00", endDateTime: "2026-06-12 17:00", reason: "HVAC repairs" },
 ];
 
+const mockCalendarEvents: CalendarEvent[] = [
+  {
+    id: 501,
+    title: "Faculty Extra Class",
+    roomName: "Room 205",
+    requesterName: "Dr. Sarah Johnson",
+    requesterRole: "faculty",
+    requesterEmail: "sarah.johnson@classreserve.test",
+    eventType: "faculty_reservation",
+    status: "approved",
+    priority: "high",
+    date: "2026-06-05",
+    startTime: "10:00",
+    endTime: "12:00",
+    conflictStatus: "no_conflict",
+    ownerRole: "faculty",
+  },
+  {
+    id: 502,
+    title: "Programming Club Workshop",
+    roomName: "Lab 301",
+    requesterName: "Programming Club",
+    requesterRole: "club",
+    requesterEmail: "programming.club@uni.edu",
+    eventType: "club_event",
+    status: "approved",
+    priority: "medium",
+    date: "2026-06-08",
+    startTime: "14:00",
+    endTime: "16:00",
+    conflictStatus: "no_conflict",
+    ownerRole: "club",
+  },
+  {
+    id: 503,
+    title: "Student Study Session",
+    roomName: "Room 102",
+    requesterName: "Jane Doe",
+    requesterRole: "student",
+    requesterEmail: "jane@uni.edu",
+    eventType: "student_booking",
+    status: "pending",
+    priority: "standard",
+    date: "2026-06-12",
+    startTime: "11:00",
+    endTime: "13:00",
+    conflictStatus: "no_conflict",
+    ownerRole: "student",
+  },
+  {
+    id: 504,
+    title: "Projector Maintenance",
+    roomName: "Room 401",
+    requesterName: "Facilities Team",
+    requesterRole: "admin",
+    eventType: "maintenance",
+    status: "maintenance",
+    priority: "high",
+    date: "2026-06-15",
+    startTime: "09:00",
+    endTime: "17:00",
+    conflictStatus: "maintenance_conflict",
+    ownerRole: "admin",
+  },
+  {
+    id: 505,
+    title: "Debate Club Event",
+    roomName: "Auditorium",
+    requesterName: "Debate Club",
+    requesterRole: "club",
+    requesterEmail: "debate.club@uni.edu",
+    eventType: "club_event",
+    status: "approved",
+    priority: "medium",
+    date: "2026-06-20",
+    startTime: "15:00",
+    endTime: "18:00",
+    conflictStatus: "no_conflict",
+    ownerRole: "club",
+  },
+  {
+    id: 506,
+    title: "Makeup Class CSE-221",
+    roomName: "Room 204",
+    requesterName: "Prof. David Lee",
+    requesterRole: "faculty",
+    requesterEmail: "david.lee@classreserve.test",
+    eventType: "faculty_reservation",
+    status: "approved",
+    priority: "high",
+    date: "2026-06-24",
+    startTime: "08:00",
+    endTime: "10:00",
+    conflictStatus: "no_conflict",
+    ownerRole: "faculty",
+  },
+  {
+    id: 507,
+    title: "Robotics Club Demo",
+    roomName: "Lab 301",
+    requesterName: "Robotics Club",
+    requesterRole: "club",
+    requesterEmail: "robotics.club@uni.edu",
+    eventType: "club_event",
+    status: "pending",
+    priority: "medium",
+    date: "2026-06-08",
+    startTime: "15:00",
+    endTime: "17:00",
+    conflictStatus: "conflict_detected",
+    ownerRole: "club",
+  },
+];
+
 const mockIssues: ClassroomIssue[] = [
   {
     id: 1,
+    postedById: "demo-student",
+    postedByEmail: "student@classreserve.test",
     title: "Projector flickering during presentations",
     roomName: "Room A-301",
     category: "Projector/Equipment Issue",
@@ -164,6 +345,8 @@ const mockIssues: ClassroomIssue[] = [
   },
   {
     id: 2,
+    postedById: 2,
+    postedByEmail: "sarah.johnson@classreserve.test",
     title: "Schedule conflict for Lab C-107",
     roomName: "Lab C-107",
     category: "Schedule Conflict",
@@ -180,10 +363,16 @@ const mockIssues: ClassroomIssue[] = [
 ];
 
 const mockNotifications: Notification[] = [
-  { id: 1, type: "success", title: "Booking Approved", message: "Your booking for Room A-301 has been approved.", createdAt: "2026-06-03 09:15", unread: true },
-  { id: 2, type: "warning", title: "New Issue Report", message: "Projector flickering was reported for Room A-301.", createdAt: "2026-06-03 10:00", unread: true },
-  { id: 3, type: "info", title: "System Update", message: "ClassReserve is running in demo mode.", createdAt: "2026-06-02 08:00", unread: false },
+  { id: 1, userId: "demo-student", type: "success", title: "Booking Approved", message: "Your booking for Room A-301 has been approved.", createdAt: "2026-06-03 09:15", unread: true },
+  { id: 2, userId: 1, type: "warning", title: "New Issue Report", message: "Projector flickering was reported for Room A-301.", createdAt: "2026-06-03 10:00", unread: true },
+  { id: 3, userId: 1, type: "info", title: "System Update", message: "ClassReserve is running in demo mode.", createdAt: "2026-06-02 08:00", unread: false },
 ];
+
+function sameOwner(ownerId: number | string | undefined, ownerEmail: string | undefined, options: UserScopedOptions = {}) {
+  if (ownerId !== undefined && options.userId !== undefined && String(ownerId) === String(options.userId)) return true;
+  if (ownerEmail && options.email && ownerEmail.toLowerCase() === options.email.toLowerCase()) return true;
+  return false;
+}
 
 function wait<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), 120));
@@ -331,13 +520,12 @@ export async function createBooking(payload: Partial<Booking>) {
   return wait({ id: Date.now(), status: "pending" as BookingStatus, priority, ...payload });
 }
 
-export async function getMyBookings(role: UserRole = "student") {
+export async function getMyBookings(options: UserScopedOptions = {}) {
   try {
     const rows = await apiRequest<any[]>("bookings.php");
-    return rows.map(toBooking);
+    return rows.map(toBooking).filter((booking) => sameOwner(booking.requesterId, booking.requesterEmail, options));
   } catch {
-    if (role === "admin" || role === "faculty") return wait(mockBookings);
-    return wait(mockBookings.filter((booking) => booking.requesterRole === role || booking.requesterRole === "student"));
+    return wait(mockBookings.filter((booking) => sameOwner(booking.requesterId, booking.requesterEmail, options)));
   }
 }
 
@@ -383,50 +571,15 @@ export async function rejectBooking(id: number, reason: string) {
   }
 }
 
-export async function getCalendarEvents() {
+export async function getCalendarEvents(_options: CalendarEventOptions = {}) {
   try {
     const [bookings, maintenance] = await Promise.all([getAllBookings(), getMaintenanceBlocks()]);
-    const bookingEvents: CalendarEvent[] = bookings.map((booking) => ({
-      id: booking.id,
-      title: booking.title,
-      roomName: booking.roomName,
-      date: booking.date,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      status: booking.status,
-      ownerRole: booking.requesterRole,
-    }));
-    const maintenanceEvents: CalendarEvent[] = maintenance.map((block) => ({
-      id: block.id,
-      title: `Maintenance: ${block.reason}`,
-      roomName: block.roomName,
-      date: block.startDateTime.slice(0, 10),
-      startTime: block.startDateTime.slice(11, 16),
-      endTime: block.endDateTime.slice(11, 16),
-      status: "maintenance",
-    }));
-    return [...bookingEvents, ...maintenanceEvents];
+    const bookingEvents = bookings.map(toCalendarEventFromBooking);
+    const maintenanceEvents = maintenance.map(toCalendarEventFromMaintenance);
+    const apiEvents = [...bookingEvents, ...maintenanceEvents].filter((event) => event.date);
+    return apiEvents.length ? apiEvents : wait(mockCalendarEvents);
   } catch {
-    const bookingEvents: CalendarEvent[] = mockBookings.map((booking) => ({
-      id: booking.id,
-      title: booking.title,
-      roomName: booking.roomName,
-      date: booking.date,
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      status: booking.status,
-      ownerRole: booking.requesterRole,
-    }));
-    const maintenanceEvents: CalendarEvent[] = mockMaintenance.map((block) => ({
-      id: block.id,
-      title: `Maintenance: ${block.reason}`,
-      roomName: block.roomName,
-      date: block.startDateTime.slice(0, 10),
-      startTime: block.startDateTime.slice(11, 16),
-      endTime: block.endDateTime.slice(11, 16),
-      status: "maintenance",
-    }));
-    return wait([...bookingEvents, ...maintenanceEvents]);
+    return wait(mockCalendarEvents);
   }
 }
 
@@ -468,6 +621,15 @@ export async function getIssues() {
     return rows.map(toIssue);
   } catch {
     return wait(mockIssues);
+  }
+}
+
+export async function getMyIssues(options: UserScopedOptions = {}) {
+  try {
+    const rows = await apiRequest<any[]>("issues.php?mine=1");
+    return rows.map(toIssue).filter((issue) => sameOwner(issue.postedById, issue.postedByEmail, options));
+  } catch {
+    return wait(mockIssues.filter((issue) => sameOwner(issue.postedById, issue.postedByEmail, options)));
   }
 }
 
@@ -572,12 +734,15 @@ export async function createMaintenanceBlockFromIssue(issueId: number, payload: 
   }
 }
 
-export async function getNotifications() {
+export async function getNotifications(options: UserScopedOptions = {}) {
   try {
     const rows = await apiRequest<any[]>("notifications.php");
-    return rows.map(toNotification);
+    const notifications = rows.map(toNotification);
+    return notifications.some((notification) => notification.userId !== undefined)
+      ? notifications.filter((notification) => sameOwner(notification.userId, undefined, options))
+      : notifications;
   } catch {
-    return wait(mockNotifications);
+    return wait(mockNotifications.filter((notification) => sameOwner(notification.userId, undefined, options)));
   }
 }
 

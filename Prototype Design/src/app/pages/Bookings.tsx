@@ -8,6 +8,18 @@ const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 type Status = "approved" | "pending" | "rejected" | "cancelled";
 type RoleType = "Faculty" | "Club" | "Student";
+type BookingRow = {
+  id: number;
+  eventName: string;
+  userRole: RoleType;
+  user: string;
+  room: string;
+  building: string;
+  date: string;
+  time: string;
+  status: Status;
+  hasDoc: boolean;
+};
 
 const fallbackBookings = [
   { id: 1, eventName: "Math 101 Lecture", userRole: "Faculty" as RoleType, user: "Dr. Sarah Johnson", room: "Room A-301", building: "Building A", date: "Apr 1, 2026", time: "10:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
@@ -56,12 +68,12 @@ const tabs: { key: Tab; label: string }[] = [
 
 export function Bookings() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
-  const [bookings, setBookings] = useState(fallbackBookings);
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
-    getMyBookings(user?.role || "student")
+    getMyBookings({ role: user?.role || "student", userId: user?.id, email: user?.email })
       .then((items) => {
         setBookings(items.map((item) => ({
           id: item.id,
@@ -77,12 +89,12 @@ export function Bookings() {
         })));
       })
       .finally(() => setIsLoading(false));
-  }, [user?.role]);
+  }, [user?.role, user?.id, user?.email]);
 
   const filtered = useMemo(() => {
     if (activeTab === "all") return bookings;
     return bookings.filter((b) => b.status === activeTab);
-  }, [activeTab]);
+  }, [bookings, activeTab]);
 
   return (
     <div className="space-y-5" style={DM_SANS}>
@@ -131,7 +143,9 @@ export function Bookings() {
           {filtered.length === 0 && (
             <div className="py-10 text-center">
               <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
-              <p className="text-sm" style={{ color: "#5E657B" }}>No bookings found.</p>
+              <p className="text-sm" style={{ color: "#5E657B" }}>
+                {activeTab === "pending" ? "No pending requests." : activeTab === "approved" ? "No approved bookings yet." : "No bookings yet."}
+              </p>
             </div>
           )}
 

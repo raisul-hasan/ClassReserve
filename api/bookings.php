@@ -33,18 +33,7 @@ if ($method === 'POST') {
     if (stripos($contentType, 'multipart/form-data') !== false) {
         $input = $_POST;
         $action = $input['action'] ?? null;
-        // handle uploaded file named 'attachment'
-        if (!empty($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK) {
-            $uploadsDir = __DIR__ . '/../public/uploads';
-            if (!is_dir($uploadsDir)) mkdir($uploadsDir, 0755, true);
-            $orig = basename($_FILES['attachment']['name']);
-            $ext = pathinfo($orig, PATHINFO_EXTENSION);
-            $newName = uniqid('att_', true) . ($ext ? '.' . $ext : '');
-            $target = $uploadsDir . '/' . $newName;
-            if (move_uploaded_file($_FILES['attachment']['tmp_name'], $target)) {
-                $uploaded_path = 'uploads/' . $newName;
-            }
-        }
+        $uploaded_path = save_uploaded_attachment('attachment', 'booking_');
     } else {
         $input = json_decode(file_get_contents('php://input'), true) ?: [];
         $action = $input['action'] ?? null;
@@ -59,9 +48,18 @@ if ($method === 'POST') {
         if (in_array($action, ['approve', 'reject'], true) && !in_array($user['role'], ['admin', 'faculty'], true)) {
             json_response(['error' => 'Only faculty or admin can approve or reject bookings.'], 403);
         }
-        $detailsStmt = $pdo->prepare('SELECT b.user_id, b.title, b.start_datetime, r.name AS room_name FROM bookings b LEFT JOIN rooms r ON b.room_id = r.id WHERE b.id = ?');
+        $detailsStmt = $pdo->prepare('SELECT b.user_id, b.title, b.start_datetime, b.status, r.name AS room_name FROM bookings b LEFT JOIN rooms r ON b.room_id = r.id WHERE b.id = ?');
         $detailsStmt->execute([$id]);
         $bookingDetails = $detailsStmt->fetch();
+        if (!$bookingDetails) {
+            json_response(['error' => 'Booking not found.'], 404);
+        }
+        if ($action === 'cancel' && !in_array($user['role'], ['admin', 'faculty'], true) && (int) $bookingDetails['user_id'] !== (int) $user['id']) {
+            json_response(['error' => 'You can only cancel your own bookings.'], 403);
+        }
+        if (in_array($bookingDetails['status'], ['rejected', 'cancelled'], true)) {
+            json_response(['error' => 'This booking can no longer be updated.'], 409);
+        }
 
         $newStatus = $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'cancelled');
         $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
@@ -88,22 +86,16 @@ if ($method === 'POST') {
     if (!valid_datetime($start) || !valid_datetime($end)) { json_response(['error' => 'Invalid date/time'], 400); }
     if (strtotime($end) <= strtotime($start)) { json_response(['error' => 'End time must be after start time'], 400); }
 
-    $roomStmt = $pdo->prepare("SELECT id, status FROM rooms WHERE id = ?");
-    $roomStmt->execute([$room_id]);
-    $room = $roomStmt->fetch();
+    $room = find_room($pdo, $room_id);
     if (!$room) { json_response(['error' => 'Room not found'], 404); }
     if ($room['status'] !== 'available') { json_response(['error' => 'Room is not available for booking'], 409); }
 
     // Pending bookings also block duplicate requests while they wait for review.
-    $conflictStmt = $pdo->prepare("SELECT id FROM bookings WHERE room_id = ? AND status IN ('pending', 'approved') AND NOT (end_datetime <= ? OR start_datetime >= ?)");
-    $conflictStmt->execute([$room_id, $start, $end]);
-    if ($conflictStmt->fetch()) {
+    if (booking_conflict_exists($pdo, $room_id, $start, $end)) {
         json_response(['error' => 'Time conflict with an existing pending or approved booking'], 409);
     }
 
-    $maintenanceStmt = $pdo->prepare('SELECT id FROM maintenance WHERE room_id = ? AND NOT (end_datetime <= ? OR start_datetime >= ?)');
-    $maintenanceStmt->execute([$room_id, $start, $end]);
-    if ($maintenanceStmt->fetch()) {
+    if (maintenance_conflict_exists($pdo, $room_id, $start, $end)) {
         json_response(['error' => 'Room is blocked for maintenance during that time'], 409);
     }
 
