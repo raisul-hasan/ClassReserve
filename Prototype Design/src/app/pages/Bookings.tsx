@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Clock, BookOpen, Shield, FileText, X } from "lucide-react";
-import { getMyBookings } from "../services/classReserveService";
+import { cancelBooking as cancelBookingRequest, getMyBookings } from "../services/classReserveService";
 import { useAuth } from "../context/AuthContext";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
@@ -100,7 +100,11 @@ export function Bookings() {
     return byStatus.filter((b) => [b.eventName, b.user, b.room, b.building, b.date, b.time, b.status, b.userRole].some((value) => String(value).toLowerCase().includes(q)));
   }, [bookings, activeTab, searchQuery]);
 
-  const cancelBooking = (id: number) => {
+  const cancelBooking = async (id: number) => {
+    const target = bookings.find((booking) => booking.id === id);
+    if (target?.status !== "pending") return;
+    if (!window.confirm("Cancel this pending booking request?")) return;
+    await cancelBookingRequest(id);
     setBookings((prev) => prev.map((booking) => booking.id === id ? { ...booking, status: "cancelled" } : booking));
     setSelectedBooking((prev) => prev?.id === id ? { ...prev, status: "cancelled" } : prev);
   };

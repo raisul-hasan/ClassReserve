@@ -1,8 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { ArrowLeft, ArrowRight, Check, Users, Upload } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { createBooking } from "../services/classReserveService";
+import { createBooking, getAvailableRooms } from "../services/classReserveService";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
@@ -58,11 +58,11 @@ export function NewBooking() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableRooms, setAvailableRooms] = useState(roomOptions);
 
-  const availableRooms = useMemo(
-    () => roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity),
-    [minCapacity]
-  );
+  useEffect(() => {
+    setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
+  }, [minCapacity]);
 
   const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 
@@ -76,6 +76,15 @@ export function NewBooking() {
     if (step === 1) {
       if (!date || !startTime || !endTime) { setMessage("Please select date and time."); return; }
       if (startTime >= endTime) { setMessage("End time must be after start time."); return; }
+      setIsSubmitting(true);
+      try {
+        const rooms = await getAvailableRooms({ date, startTime, endTime, minimumCapacity: minCapacity });
+        setAvailableRooms(rooms.filter((room) => room.status === "available"));
+      } catch {
+        setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
+      } finally {
+        setIsSubmitting(false);
+      }
     }
     if (step === 2) {
       if (!selectedRoom) { setMessage("Please select a room."); return; }
@@ -93,6 +102,8 @@ export function NewBooking() {
           attendees: Number(attendees),
           requesterRole: user?.role || "student",
           requesterName: user?.name || "Requester",
+          requesterId: user?.id,
+          requesterEmail: user?.email,
           hasDocument: Boolean(attachment),
           attachment,
           description,
@@ -400,7 +411,7 @@ export function NewBooking() {
           onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
-          {isSubmitting ? "Submitting..." : step === 1 ? "Search Availability" : step === 3 ? "Submit Booking Request" : "Continue"}
+          {isSubmitting ? (step === 1 ? "Searching..." : "Submitting...") : step === 1 ? "Search Availability" : step === 3 ? "Submit Booking Request" : "Continue"}
           {step < 3 && <ArrowRight className="w-4 h-4" />}
         </button>
       </div>

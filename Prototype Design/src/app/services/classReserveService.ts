@@ -30,6 +30,37 @@ export type CalendarEventOptions = UserScopedOptions;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost/classreserve/api";
 
+const STORAGE_PREFIX = "classreserve.frontend.";
+
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function loadStore<T>(key: string, seed: T): T {
+  if (!canUseStorage()) return JSON.parse(JSON.stringify(seed));
+  const fullKey = STORAGE_PREFIX + key;
+  const saved = window.localStorage.getItem(fullKey);
+  if (saved) {
+    try { return JSON.parse(saved) as T; } catch { /* reset corrupt data */ }
+  }
+  window.localStorage.setItem(fullKey, JSON.stringify(seed));
+  return JSON.parse(JSON.stringify(seed));
+}
+
+function saveStore<T>(key: string, value: T): T {
+  if (canUseStorage()) window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
+  return value;
+}
+
+function nextId(items: { id: number }[]) {
+  return Math.max(0, ...items.map((item) => Number(item.id) || 0)) + 1;
+}
+
+function nowText() {
+  return new Date().toISOString().slice(0, 16).replace("T", " ");
+}
+
+
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}/${path}`, {
     credentials: "include",
@@ -439,33 +470,44 @@ export async function getAvailableRooms(filters: RoomAvailabilityFilters = {}) {
     const rows = await apiRequest<any[]>(`rooms.php${query ? `?${query}` : ""}`);
     return rows.map(toRoom);
   } catch {
-    return wait(mockRooms.filter((room) => {
-    if (filters.minimumCapacity && room.capacity < filters.minimumCapacity) return false;
-    if (filters.building && room.building !== filters.building) return false;
-    if (filters.roomType && room.type !== filters.roomType) return false;
-    if (filters.equipment?.length && !filters.equipment.every((item) => room.equipment.includes(item))) return false;
-    return room.status !== "disabled";
+    const rooms = loadStore<Room[]>("rooms", mockRooms);
+    const bookings = loadStore<Booking[]>("bookings", mockBookings);
+    const maintenance = loadStore<MaintenanceBlock[]>("maintenance", mockMaintenance);
+    return wait(rooms.map((room) => {
+      let status = room.status;
+      let conflictWarning = room.conflictWarning;
+      let maintenanceWarning = room.maintenanceWarning;
+      if (filters.date && filters.startTime && filters.endTime) {
+        const hasBookingConflict = bookings.some((booking) =>
+          booking.roomName === room.name &&
+          booking.date === filters.date &&
+          ["approved", "pending"].includes(booking.status) &&
+          timesOverlap(filters.startTime!, filters.endTime!, booking.startTime, booking.endTime)
+        );
+        const hasMaintenanceConflict = maintenance.some((block) =>
+          block.roomName === room.name &&
+          block.startDateTime.slice(0, 10) <= filters.date! &&
+          block.endDateTime.slice(0, 10) >= filters.date! &&
+          timesOverlap(filters.startTime!, filters.endTime!, block.startDateTime.slice(11, 16), block.endDateTime.slice(11, 16))
+        );
+        if (hasMaintenanceConflict) { status = "maintenance"; maintenanceWarning = "Room is blocked for maintenance during this time."; }
+        else if (hasBookingConflict) { status = "booked"; conflictWarning = "Time conflict detected for the selected slot."; }
+        else if (status === "booked") { status = "available"; conflictWarning = undefined; }
+      }
+      return { ...room, status, conflictWarning, maintenanceWarning };
+    }).filter((room) => {
+      if (filters.minimumCapacity && room.capacity < filters.minimumCapacity) return false;
+      if (filters.building && filters.building !== "all" && room.building !== filters.building) return false;
+      if (filters.roomType && filters.roomType !== "all" && room.type !== filters.roomType) return false;
+      if (filters.equipment?.length && !filters.equipment.every((item) => room.equipment.includes(item))) return false;
+      return room.status !== "disabled";
     }));
   }
 }
 
 export async function createRoom(payload: Partial<Room> & { notes?: string }) {
-  const data = await apiRequest<{ ok: boolean; id: number }>("rooms.php", {
-    method: "POST",
-    body: JSON.stringify({
-      name: payload.name,
-      capacity: payload.capacity,
-      type: payload.type,
-      building: payload.building,
-      floor: payload.floor,
-      equipment: payload.equipment?.join(", "),
-      status: payload.status || "available",
-      notes: payload.notes || "",
-    }),
-  });
-
-  return {
-    id: data.id,
+  const nextRoom: Room = {
+    id: Date.now(),
     name: payload.name || "New Room",
     building: payload.building || "Campus",
     floor: payload.floor,
@@ -473,20 +515,36 @@ export async function createRoom(payload: Partial<Room> & { notes?: string }) {
     type: payload.type || "Lecture",
     equipment: payload.equipment || [],
     status: payload.status || "available",
-  } as Room;
+  };
+  try {
+    const data = await apiRequest<{ ok: boolean; id: number }>("rooms.php", {
+      method: "POST",
+      body: JSON.stringify({
+        name: payload.name,
+        capacity: payload.capacity,
+        type: payload.type,
+        building: payload.building,
+        floor: payload.floor,
+        equipment: payload.equipment?.join(", "),
+        status: payload.status || "available",
+        notes: payload.notes || "",
+      }),
+    });
+    return { ...nextRoom, id: data.id } as Room;
+  } catch {
+    const rooms = loadStore<Room[]>("rooms", mockRooms);
+    const created = { ...nextRoom, id: nextId(rooms) };
+    saveStore("rooms", [...rooms, created].sort((a, b) => a.name.localeCompare(b.name)));
+    return wait(created);
+  }
 }
 
 export async function createBooking(payload: Partial<Booking>) {
   if (payload.roomName || payload.roomName === "") {
-    let room = mockRooms.find((item) => item.name === payload.roomName);
+    let room = loadStore<Room[]>("rooms", mockRooms).find((item) => item.name === payload.roomName);
     try {
       const rooms = await getAvailableRooms();
       room = rooms.find((item) => item.name === payload.roomName) || room;
-    } catch {
-      // Mock room lookup remains available below.
-    }
-    payload = { ...payload, roomName: payload.roomName, id: payload.id };
-    try {
       const start = `${payload.date} ${payload.startTime}:00`;
       const end = `${payload.date} ${payload.endTime}:00`;
       const attachment = (payload as any).attachment as File | undefined;
@@ -512,12 +570,32 @@ export async function createBooking(payload: Partial<Booking>) {
         }),
       });
     } catch {
-      // Fall through to mock response below.
+      // Fall through to local mock persistence below.
     }
   }
 
+  const bookings = loadStore<Booking[]>("bookings", mockBookings);
   const priority = payload.requesterRole === "faculty" ? "high" : payload.requesterRole === "club" ? "medium" : "standard";
-  return wait({ id: Date.now(), status: "pending" as BookingStatus, priority, ...payload });
+  const newBooking: Booking = {
+    id: nextId(bookings),
+    requesterId: payload.requesterId,
+    requesterEmail: payload.requesterEmail,
+    title: payload.title || "Untitled Booking",
+    requesterName: payload.requesterName || "Requester",
+    requesterRole: payload.requesterRole || "student",
+    roomName: payload.roomName || "Room",
+    building: payload.building || "Campus",
+    date: payload.date || "",
+    startTime: payload.startTime || "",
+    endTime: payload.endTime || "",
+    attendees: Number(payload.attendees || 0),
+    priority,
+    status: payload.status || "pending",
+    hasDocument: Boolean(payload.hasDocument),
+    conflictStatus: payload.conflictStatus || "clear",
+  };
+  saveStore("bookings", [...bookings, newBooking]);
+  return wait({ ok: true, id: newBooking.id, message: "Booking saved locally.", ...newBooking });
 }
 
 export async function getMyBookings(options: UserScopedOptions = {}) {
@@ -525,7 +603,7 @@ export async function getMyBookings(options: UserScopedOptions = {}) {
     const rows = await apiRequest<any[]>("bookings.php");
     return rows.map(toBooking).filter((booking) => sameOwner(booking.requesterId, booking.requesterEmail, options));
   } catch {
-    return wait(mockBookings.filter((booking) => sameOwner(booking.requesterId, booking.requesterEmail, options)));
+    return wait(loadStore<Booking[]>("bookings", mockBookings).filter((booking) => sameOwner(booking.requesterId, booking.requesterEmail, options)));
   }
 }
 
@@ -534,7 +612,7 @@ export async function getAllBookings() {
     const rows = await apiRequest<any[]>("bookings.php");
     return rows.map(toBooking).sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole));
   } catch {
-    return wait([...mockBookings].sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole)));
+    return wait(loadStore<Booking[]>("bookings", mockBookings).sort((a, b) => priorityRank(b.requesterRole) - priorityRank(a.requesterRole)));
   }
 }
 
@@ -545,7 +623,7 @@ export async function getPendingApprovals(role: UserRole) {
     return bookings.filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole));
   } catch {
     const allowedRoles: UserRole[] = role === "faculty" ? ["student", "club"] : ["student", "club", "faculty"];
-    return wait(mockBookings.filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole)));
+    return wait(loadStore<Booking[]>("bookings", mockBookings).filter((booking) => booking.status === "pending" && allowedRoles.includes(booking.requesterRole)));
   }
 }
 
@@ -556,6 +634,8 @@ export async function approveBooking(id: number, reason?: string) {
       body: JSON.stringify({ id, action: "approve", reason }),
     });
   } catch {
+    const bookings = loadStore<Booking[]>("bookings", mockBookings);
+    saveStore("bookings", bookings.map((booking) => booking.id === id ? { ...booking, status: "approved" as BookingStatus, conflictStatus: "clear" as const } : booking));
     return wait({ ok: true, id, status: "approved" as BookingStatus, reason });
   }
 }
@@ -567,7 +647,22 @@ export async function rejectBooking(id: number, reason: string) {
       body: JSON.stringify({ id, action: "reject", reason }),
     });
   } catch {
+    const bookings = loadStore<Booking[]>("bookings", mockBookings);
+    saveStore("bookings", bookings.map((booking) => booking.id === id ? { ...booking, status: "rejected" as BookingStatus, rejectionReason: reason } : booking));
     return wait({ ok: true, id, status: "rejected" as BookingStatus, reason });
+  }
+}
+
+export async function cancelBooking(id: number) {
+  try {
+    return await apiRequest<{ ok: boolean }>("bookings.php", {
+      method: "POST",
+      body: JSON.stringify({ id, action: "cancel" }),
+    });
+  } catch {
+    const bookings = loadStore<Booking[]>("bookings", mockBookings);
+    saveStore("bookings", bookings.map((booking) => booking.id === id ? { ...booking, status: "cancelled" as BookingStatus } : booking));
+    return wait({ ok: true, id, status: "cancelled" as BookingStatus });
   }
 }
 
@@ -579,7 +674,7 @@ export async function getCalendarEvents(_options: CalendarEventOptions = {}) {
     const apiEvents = [...bookingEvents, ...maintenanceEvents].filter((event) => event.date);
     return apiEvents.length ? apiEvents : wait(mockCalendarEvents);
   } catch {
-    return wait(mockCalendarEvents);
+    return wait(buildVisibleCalendarEvents(_options));
   }
 }
 
@@ -595,7 +690,19 @@ export async function createMaintenanceBlock(payload: Partial<MaintenanceBlock>)
       }),
     });
   } catch {
-    return wait({ id: Date.now(), ...payload });
+    const blocks = loadStore<MaintenanceBlock[]>("maintenance", mockMaintenance);
+    const rooms = loadStore<Room[]>("rooms", mockRooms);
+    const newBlock: MaintenanceBlock = {
+      id: nextId(blocks),
+      roomId: Number(payload.roomId || rooms.find((room) => room.name === payload.roomName)?.id || 0),
+      roomName: payload.roomName || rooms.find((room) => room.id === payload.roomId)?.name || "Selected Room",
+      startDateTime: payload.startDateTime || "",
+      endDateTime: payload.endDateTime || "",
+      reason: payload.reason || "Maintenance",
+    };
+    saveStore("maintenance", [...blocks, newBlock]);
+    saveStore("rooms", rooms.map((room) => room.id === newBlock.roomId || room.name === newBlock.roomName ? { ...room, status: "maintenance" as const, maintenanceWarning: newBlock.reason } : room));
+    return wait({ ok: true, id: newBlock.id, ...newBlock });
   }
 }
 
@@ -611,7 +718,7 @@ export async function getMaintenanceBlocks() {
       reason: row.reason || "Maintenance",
     }));
   } catch {
-    return wait(mockMaintenance);
+    return wait(loadStore<MaintenanceBlock[]>("maintenance", mockMaintenance));
   }
 }
 
@@ -620,7 +727,7 @@ export async function getIssues() {
     const rows = await apiRequest<any[]>("issues.php");
     return rows.map(toIssue);
   } catch {
-    return wait(mockIssues);
+    return wait(loadStore<ClassroomIssue[]>("issues", mockIssues));
   }
 }
 
@@ -629,7 +736,7 @@ export async function getMyIssues(options: UserScopedOptions = {}) {
     const rows = await apiRequest<any[]>("issues.php?mine=1");
     return rows.map(toIssue).filter((issue) => sameOwner(issue.postedById, issue.postedByEmail, options));
   } catch {
-    return wait(mockIssues.filter((issue) => sameOwner(issue.postedById, issue.postedByEmail, options)));
+    return wait(loadStore<ClassroomIssue[]>("issues", mockIssues).filter((issue) => sameOwner(issue.postedById, issue.postedByEmail, options)));
   }
 }
 
@@ -665,7 +772,28 @@ export async function createIssue(payload: Partial<ClassroomIssue>) {
     });
     return toIssue(issue);
   } catch {
-    return wait({ id: Date.now(), status: "Open" as IssueStatus, comments: [], upvotes: 0, ...payload });
+    const issues = loadStore<ClassroomIssue[]>("issues", mockIssues);
+    const newIssue: ClassroomIssue = {
+      id: nextId(issues),
+      title: payload.title || "Untitled Issue",
+      roomName: payload.roomName || "Room",
+      category: payload.category || "Other",
+      postedBy: payload.postedBy || "Reporter",
+      postedById: payload.postedById,
+      postedByEmail: payload.postedByEmail,
+      userRole: payload.userRole || "student",
+      createdAt: nowText(),
+      description: payload.description || "",
+      status: "Open",
+      priority: payload.priority || "Medium",
+      comments: [],
+      upvotes: 0,
+      hasDocument: payload.hasDocument,
+      isAffectingBooking: payload.isAffectingBooking,
+      relatedBooking: payload.relatedBooking,
+    };
+    saveStore("issues", [newIssue, ...issues]);
+    return wait(newIssue);
   }
 }
 
@@ -674,7 +802,7 @@ export async function getIssueById(id: number) {
     const issue = await apiRequest<any>(`issues.php?id=${id}`);
     return issue ? toIssue(issue) : null;
   } catch {
-    return wait(mockIssues.find((issue) => issue.id === id) || null);
+    return wait(loadStore<ClassroomIssue[]>("issues", mockIssues).find((issue) => issue.id === id) || null);
   }
 }
 
@@ -685,6 +813,12 @@ export async function addIssueComment(issueId: number, comment: string) {
       body: JSON.stringify({ action: "comment", issue_id: issueId, message: comment }),
     });
   } catch {
+    const issues = loadStore<ClassroomIssue[]>("issues", mockIssues);
+    const currentUser = canUseStorage() ? JSON.parse(window.localStorage.getItem("user") || "null") : null;
+    saveStore("issues", issues.map((issue) => issue.id === issueId ? {
+      ...issue,
+      comments: [...issue.comments, { id: nextId(issue.comments as any), authorName: currentUser?.name || "User", authorRole: currentUser?.role || "student", message: comment, createdAt: nowText() }]
+    } : issue));
     return wait({ ok: true, issueId, comment });
   }
 }
@@ -702,6 +836,8 @@ export async function updateIssueStatus(issueId: number, status: IssueStatus, re
       }),
     });
   } catch {
+    const issues = loadStore<ClassroomIssue[]>("issues", mockIssues);
+    saveStore("issues", issues.map((issue) => issue.id === issueId ? { ...issue, status, adminResponse: reason || issue.adminResponse } : issue));
     return wait({ ok: true, issueId, status, reason });
   }
 }
@@ -713,6 +849,8 @@ export async function upvoteIssue(issueId: number) {
       body: JSON.stringify({ action: "upvote", issue_id: issueId }),
     });
   } catch {
+    const issues = loadStore<ClassroomIssue[]>("issues", mockIssues);
+    saveStore("issues", issues.map((issue) => issue.id === issueId ? { ...issue, upvotes: issue.upvotes + 1 } : issue));
     return wait({ ok: true, issueId });
   }
 }
@@ -730,7 +868,10 @@ export async function createMaintenanceBlockFromIssue(issueId: number, payload: 
       }),
     });
   } catch {
-    return wait({ ok: true, issueId, maintenanceBlock: { id: Date.now(), ...payload } });
+    const result = await createMaintenanceBlock(payload);
+    const issues = loadStore<ClassroomIssue[]>("issues", mockIssues);
+    saveStore("issues", issues.map((issue) => issue.id === issueId ? { ...issue, status: "In Progress" as IssueStatus, adminResponse: "Maintenance block created from this issue." } : issue));
+    return wait({ ok: true, issueId, maintenanceBlock: result });
   }
 }
 
@@ -742,7 +883,7 @@ export async function getNotifications(options: UserScopedOptions = {}) {
       ? notifications.filter((notification) => sameOwner(notification.userId, undefined, options))
       : notifications;
   } catch {
-    return wait(mockNotifications.filter((notification) => sameOwner(notification.userId, undefined, options)));
+    return wait(loadStore<Notification[]>("notifications", mockNotifications).filter((notification) => sameOwner(notification.userId, undefined, options)));
   }
 }
 
@@ -753,6 +894,8 @@ export async function markNotificationRead(id: number) {
       body: JSON.stringify({ id }),
     });
   } catch {
+    const notifications = loadStore<Notification[]>("notifications", mockNotifications);
+    saveStore("notifications", notifications.map((notification) => notification.id === id ? { ...notification, unread: false } : notification));
     return wait({ ok: true, id });
   }
 }
@@ -764,8 +907,28 @@ export async function markAllNotificationsRead() {
       body: JSON.stringify({ action: "read_all" }),
     });
   } catch {
+    const notifications = loadStore<Notification[]>("notifications", mockNotifications);
+    saveStore("notifications", notifications.map((notification) => ({ ...notification, unread: false })));
     return wait({ ok: true });
   }
+}
+
+function timesOverlap(startA: string, endA: string, startB: string, endB: string) {
+  return startA < endB && endA > startB;
+}
+
+function buildVisibleCalendarEvents(options: CalendarEventOptions = {}) {
+  const bookings = loadStore<Booking[]>("bookings", mockBookings).map(toCalendarEventFromBooking);
+  const maintenance = loadStore<MaintenanceBlock[]>("maintenance", mockMaintenance).map(toCalendarEventFromMaintenance);
+  const seeded = [...mockCalendarEvents, ...bookings, ...maintenance];
+  const unique = new Map<string, CalendarEvent>();
+  seeded.forEach((event) => unique.set(`${event.eventType}-${event.id}-${event.date}`, event));
+  const events = Array.from(unique.values());
+  if (options.role === "admin") return events;
+  if (options.role === "faculty") {
+    return events.filter((event) => event.status === "approved" || event.status === "maintenance" || event.requesterRole === "faculty" || (event.status === "pending" && ["student", "club"].includes(event.requesterRole)));
+  }
+  return events.filter((event) => event.status === "approved" || event.status === "maintenance" || sameOwner(event.requesterId, event.requesterEmail, options));
 }
 
 function priorityRank(role: UserRole) {
