@@ -114,6 +114,13 @@ export function Calendar() {
     if (currentMonth === 11) { setCurrentYear((y) => y + 1); setCurrentMonth(0); }
     else setCurrentMonth((m) => m + 1);
   };
+  const goToday = () => {
+    setCurrentYear(today.getFullYear());
+    setCurrentMonth(today.getMonth());
+    setSelectedDay(today.getDate());
+    setSelectedEvent(null);
+    setDrawerOpen(true);
+  };
 
   const dayStr = (day: number) =>
     `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
@@ -246,11 +253,43 @@ export function Calendar() {
           <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground">
             {MONTH_NAMES[currentMonth]} {currentYear}
           </h2>
-          <button onClick={nextMonth} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10" style={{ color: "#5E657B" }}>
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={goToday} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}>
+              Today
+            </button>
+            <button onClick={nextMonth} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10" style={{ color: "#5E657B" }}>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
+        {viewMode !== "month" && (
+          <div className="p-4 space-y-3">
+            {filteredEvents
+              .filter((event) => {
+                if (viewMode === "day") return event.date === dayStr(selectedDay || today.getDate());
+                const eventDate = new Date(event.date + "T00:00:00");
+                const anchor = new Date(currentYear, currentMonth, selectedDay || today.getDate());
+                const diff = Math.abs(eventDate.getTime() - anchor.getTime()) / (1000 * 60 * 60 * 24);
+                return diff < 7;
+              })
+              .map((event) => (
+                <button
+                  key={event.id}
+                  onClick={(e) => handleEventClick(event, e)}
+                  className="w-full text-left rounded-xl p-4 border hover:bg-[#891D1A]/5"
+                  style={{ borderColor: "rgba(137,29,26,0.15)" }}
+                >
+                  <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>{event.title}</p>
+                  <p className="text-xs mt-1" style={{ color: "#5E657B" }}>{event.date} · {timeLabel(event)} · {event.roomName}</p>
+                </button>
+              ))}
+            {filteredEvents.length === 0 && <div className="py-10 text-center text-sm" style={{ color: "#5E657B" }}>No events match the current filters.</div>}
+          </div>
+        )}
+
+        {viewMode === "month" && (
+        <>
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-border">
           {DAY_NAMES.map((d) => (
@@ -314,6 +353,8 @@ export function Calendar() {
             );
           })}
         </div>
+        </>
+        )}
       </div>
 
       {/* Side Drawer */}

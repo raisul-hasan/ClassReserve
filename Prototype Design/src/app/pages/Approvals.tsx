@@ -43,6 +43,12 @@ function priorityStyle(p: string, role: string) {
 export function Approvals() {
   const [requests, setRequests] = useState<ApprovalRequest[]>(initialRequests);
   const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<"all" | ApprovalRequest["status"]>("pending");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+  const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
+  const [rejectingRequest, setRejectingRequest] = useState<ApprovalRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
   const { user } = useAuth();
 
   useEffect(() => {
@@ -70,15 +76,33 @@ export function Approvals() {
 
   const pending = useMemo(() => requests.filter((r) => r.status === "pending"), [requests]);
   const reviewed = useMemo(() => requests.filter((r) => r.status !== "pending"), [requests]);
+  const visibleRequests = useMemo(() => {
+    return requests
+      .filter((r) => statusFilter === "all" || r.status === statusFilter)
+      .filter((r) => roleFilter === "all" || r.role === roleFilter)
+      .filter((r) => priorityFilter === "all" || r.priority === priorityFilter)
+      .sort((a, b) => ({ high: 3, medium: 2, low: 1 }[b.priority] - { high: 3, medium: 2, low: 1 }[a.priority]));
+  }, [requests, statusFilter, roleFilter, priorityFilter]);
 
   const approve = async (id: number) => {
     await approveBooking(id);
     setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: "approved" } : r)));
   };
-  const reject = async (id: number) => {
-    const reason = window.prompt("Reason for rejection?", "Not available at the requested time.") || "Rejected";
+  const reject = async () => {
+    if (!rejectingRequest || !rejectReason.trim()) return;
+    const id = rejectingRequest.id;
+    const reason = rejectReason.trim();
     await rejectBooking(id, reason);
     setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status: "rejected" } : r)));
+    setSelectedRequest((prev) => prev?.id === id ? { ...prev, status: "rejected" } : prev);
+    setRejectingRequest(null);
+    setRejectReason("");
+  };
+
+  const resetFilters = () => {
+    setStatusFilter("pending");
+    setRoleFilter("all");
+    setPriorityFilter("all");
   };
 
   return (
@@ -171,7 +195,7 @@ export function Approvals() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => reject(req.id)}
+                      onClick={() => { setRejectingRequest(req); setRejectReason(""); }}
                       className="flex-1 py-2 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1"
                       style={{ background: "#891D1A" }}
                       onMouseEnter={(e) => (e.currentTarget.style.background = "#6b1513")}
@@ -181,13 +205,13 @@ export function Approvals() {
                     </button>
                     <button
                       onClick={() => approve(req.id)}
-                      disabled={req.hasConflict}
+                      disabled={req.hasConflict && user?.role !== "admin"}
                       className="flex-1 py-2 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{ background: "#3B6E4A" }}
                       onMouseEnter={(e) => { if (!req.hasConflict) e.currentTarget.style.background = "#2d5437"; }}
                       onMouseLeave={(e) => { if (!req.hasConflict) e.currentTarget.style.background = "#3B6E4A"; }}
                     >
-                      <Check className="w-4 h-4" /> Approve
+                      <Check className="w-4 h-4" /> {req.hasConflict && user?.role === "admin" ? "Override Approve" : "Approve"}
                     </button>
                   </div>
                 </div>
@@ -239,6 +263,95 @@ export function Approvals() {
           })}
         </div>
       </div>
+
+      <div className="bg-card rounded-xl p-4 shadow-sm flex flex-wrap gap-3 items-end">
+        {[
+          { label: "Status", value: statusFilter, onChange: setStatusFilter, options: [["all", "All"], ["pending", "Pending"], ["approved", "Approved"], ["rejected", "Rejected"]] },
+          { label: "Role", value: roleFilter, onChange: setRoleFilter, options: [["all", "All Roles"], ["Student", "Student"], ["Club", "Club"], ["Faculty", "Faculty"]] },
+          { label: "Priority", value: priorityFilter, onChange: setPriorityFilter, options: [["all", "All Priorities"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]] },
+        ].map((filter) => (
+          <div key={filter.label} className="flex items-center gap-2">
+            <label className="text-xs font-medium" style={{ color: "#5E657B" }}>{filter.label}</label>
+            <select value={filter.value} onChange={(e) => (filter.onChange as any)(e.target.value)} className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2]" style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+              {filter.options.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </div>
+        ))}
+        <button onClick={resetFilters} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: "#891D1A" }}>Reset</button>
+      </div>
+
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden">
+        <div className="px-5 py-4 border-b border-border">
+          <h3 className="text-sm font-semibold" style={{ color: "#5E657B" }}>FILTERED REQUESTS ({visibleRequests.length})</h3>
+        </div>
+        <div className="divide-y divide-border">
+          {visibleRequests.length === 0 && <div className="py-10 text-center text-sm" style={{ color: "#5E657B" }}>No requests match these filters.</div>}
+          {visibleRequests.map((req) => {
+            const ps = priorityStyle(req.priority, req.role);
+            return (
+              <div key={req.id} className="px-5 py-4 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>{req.eventName}</p>
+                  <p className="text-xs mt-1" style={{ color: "#5E657B" }}>{req.user} · {req.room} · {req.date} · {req.time}</p>
+                  <span className="inline-block mt-2 text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: ps.bg + "20", color: ps.bg }}>{ps.label}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setSelectedRequest(req)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}>View Details</button>
+                  {req.status === "pending" && (
+                    <>
+                      <button onClick={() => { setRejectingRequest(req); setRejectReason(""); }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: "#891D1A" }}>Reject</button>
+                      <button onClick={() => approve(req.id)} disabled={req.hasConflict && user?.role !== "admin"} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40" style={{ background: "#3B6E4A" }}>{req.hasConflict && user?.role === "admin" ? "Override Approve" : "Approve"}</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {rejectingRequest && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(33,7,6,0.55)" }} onClick={() => setRejectingRequest(null)}>
+          <div className="bg-card rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground mb-2">Reject Request</h2>
+            <p className="text-sm mb-4" style={{ color: "#5E657B" }}>{rejectingRequest.eventName}</p>
+            <textarea value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={4} placeholder="Reason for rejection..." className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none resize-none text-sm" style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setRejectingRequest(null)} className="flex-1 py-2.5 rounded-lg text-sm font-medium border" style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}>Cancel</button>
+              <button onClick={reject} disabled={!rejectReason.trim()} className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-40" style={{ background: "#891D1A" }}>Reject</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedRequest && (
+        <div className="fixed inset-0 z-40" style={{ background: "rgba(33,7,6,0.4)" }} onClick={() => setSelectedRequest(null)}>
+          <div className="absolute right-0 top-0 h-full w-96 bg-card shadow-2xl flex flex-col" style={{ borderLeft: "1px solid rgba(137,29,26,0.15)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground">Request Details</h2>
+              <button onClick={() => setSelectedRequest(null)} className="w-8 h-8 rounded-lg hover:bg-[#891D1A]/10" style={{ color: "#5E657B" }}>×</button>
+            </div>
+            <div className="p-5 space-y-4">
+              {[
+                ["Event", selectedRequest.eventName],
+                ["Requester", `${selectedRequest.user} (${selectedRequest.role})`],
+                ["Room", `${selectedRequest.room}, ${selectedRequest.building}`],
+                ["Date", selectedRequest.date],
+                ["Time", selectedRequest.time],
+                ["Priority", selectedRequest.priority],
+                ["Status", selectedRequest.status],
+                ["Description", selectedRequest.description || "No description provided."],
+                ["Conflict", selectedRequest.hasConflict ? selectedRequest.conflictWith || "Conflict detected" : "No conflict"],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: "#5E657B" }}>{label}</p>
+                  <p className="text-sm text-foreground">{value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

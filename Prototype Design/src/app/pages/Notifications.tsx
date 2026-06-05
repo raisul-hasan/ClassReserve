@@ -99,6 +99,7 @@ function fromServiceNotification(notification: AppNotification): Notif {
 export function Notifications() {
   const { user } = useAuth();
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const [filter, setFilter] = useState<"all" | "unread" | NotifType>("all");
 
   useEffect(() => {
     let mounted = true;
@@ -109,6 +110,11 @@ export function Notifications() {
   }, [user?.role, user?.id, user?.email]);
 
   const unreadCount = notifs.filter((n) => n.unread).length;
+  const visibleNotifs = notifs.filter((n) => {
+    if (filter === "all") return true;
+    if (filter === "unread") return n.unread;
+    return n.type === filter;
+  });
 
   const markAllRead = async () => {
     await markAllNotificationsRead();
@@ -141,16 +147,29 @@ export function Notifications() {
         )}
       </div>
 
-      {notifs.length === 0 && (
+      <div className="flex items-center gap-2 flex-wrap">
+        {(["all", "unread", "success", "warning", "error", "pending", "info"] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFilter(item)}
+            className="px-3 py-1.5 rounded-full text-xs font-medium border capitalize"
+            style={filter === item ? { background: "#891D1A", borderColor: "#891D1A", color: "#fff" } : { borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
+      {visibleNotifs.length === 0 && (
         <div className="py-14 text-center bg-card rounded-xl shadow-sm">
           <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
-          <p className="text-sm" style={{ color: "#5E657B" }}>No notifications yet.</p>
+          <p className="text-sm" style={{ color: "#5E657B" }}>No notifications match this filter.</p>
         </div>
       )}
 
       <div className="space-y-6">
         {GROUPS.map((group) => {
-          const items = notifs.filter((n) => n.group === group.key);
+          const items = visibleNotifs.filter((n) => n.group === group.key);
           if (items.length === 0) return null;
           return (
             <div key={group.key}>

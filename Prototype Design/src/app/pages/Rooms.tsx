@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router";
-import { Users, LayoutGrid, List, ExternalLink, Plus, X } from "lucide-react";
+import { useLocation, useNavigate } from "react-router";
+import { Users, LayoutGrid, List, ExternalLink, Plus, X, Pencil, Power } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { createRoom, getAvailableRooms } from "../services/classReserveService";
 import { Room } from "../types/classReserve";
@@ -29,13 +29,22 @@ function statusStyle(status: string) {
 }
 
 export function Rooms() {
+  const location = useLocation();
+  const initialSearch = (location.state as { searchQuery?: string } | null)?.searchQuery || "";
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [dateFilter, setDateFilter] = useState("");
+  const [startTimeFilter, setStartTimeFilter] = useState("");
+  const [endTimeFilter, setEndTimeFilter] = useState("");
   const [capacityFilter, setCapacityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [buildingFilter, setBuildingFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [rooms, setRooms] = useState<Room[]>(fallbackRooms as Room[]);
   const [isLoading, setIsLoading] = useState(true);
   const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [isSavingRoom, setIsSavingRoom] = useState(false);
   const [roomForm, setRoomForm] = useState({
@@ -58,13 +67,25 @@ export function Rooms() {
   }, []);
 
   const filtered = rooms.filter((r) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && ![
+      r.name,
+      r.building,
+      r.type,
+      r.status,
+      ...r.equipment,
+    ].some((value) => String(value).toLowerCase().includes(q))) return false;
     if (capacityFilter !== "all" && r.capacity < parseInt(capacityFilter)) return false;
     if (statusFilter !== "all" && r.status !== statusFilter) return false;
     if (buildingFilter !== "all" && r.building !== buildingFilter) return false;
+    if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    if (equipmentFilter !== "all" && !r.equipment.includes(equipmentFilter)) return false;
+    if (startTimeFilter && endTimeFilter && startTimeFilter >= endTimeFilter) return false;
     return true;
   });
 
   const buildings = Array.from(new Set(rooms.map((r) => r.building)));
+  const equipment = Array.from(new Set(rooms.flatMap((r) => r.equipment))).sort();
 
   const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 
@@ -77,6 +98,7 @@ export function Rooms() {
   };
 
   const resetRoomForm = () => {
+    setEditingRoomId(null);
     setRoomForm({
       name: "",
       building: "",
@@ -110,6 +132,23 @@ export function Rooms() {
 
     setIsSavingRoom(true);
     try {
+      if (editingRoomId !== null) {
+        const updatedRoom: Room = {
+          id: editingRoomId,
+          name: roomForm.name.trim(),
+          building: roomForm.building.trim(),
+          floor: roomForm.floor.trim(),
+          capacity,
+          type: roomForm.type,
+          status: roomForm.status,
+          equipment: roomForm.equipment.split(",").map((item) => item.trim()).filter(Boolean),
+        };
+        setRooms((prev) => prev.map((room) => room.id === editingRoomId ? updatedRoom : room).sort((a, b) => a.name.localeCompare(b.name)));
+        setRoomModalOpen(false);
+        resetRoomForm();
+        setMessage("Room updated locally.");
+        return;
+      }
       const created = await createRoom({
         name: roomForm.name.trim(),
         building: roomForm.building.trim(),
@@ -130,6 +169,39 @@ export function Rooms() {
     } finally {
       setIsSavingRoom(false);
     }
+  };
+
+  const openEditRoom = (room: Room) => {
+    setEditingRoomId(room.id);
+    setRoomForm({
+      name: room.name,
+      building: room.building,
+      floor: room.floor || "",
+      capacity: String(room.capacity),
+      type: room.type,
+      status: room.status,
+      equipment: room.equipment.join(", "),
+      notes: "",
+    });
+    setRoomModalOpen(true);
+  };
+
+  const toggleRoomStatus = (room: Room) => {
+    const nextStatus = room.status === "disabled" ? "available" : "disabled";
+    setRooms((prev) => prev.map((item) => item.id === room.id ? { ...item, status: nextStatus } : item));
+    setMessage(`${room.name} ${nextStatus === "disabled" ? "disabled" : "enabled"} locally.`);
+  };
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setDateFilter("");
+    setStartTimeFilter("");
+    setEndTimeFilter("");
+    setCapacityFilter("all");
+    setStatusFilter("all");
+    setBuildingFilter("all");
+    setTypeFilter("all");
+    setEquipmentFilter("all");
   };
 
   const selectCls =
@@ -199,9 +271,44 @@ export function Rooms() {
         className="bg-card rounded-xl p-4 flex flex-wrap gap-3 items-end shadow-sm"
       >
         <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Search</label>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Room, building, equipment..."
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
           <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Date</label>
           <input
             type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>From</label>
+          <input
+            type="time"
+            value={startTimeFilter}
+            onChange={(e) => setStartTimeFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>To</label>
+          <input
+            type="time"
+            value={endTimeFilter}
+            onChange={(e) => setEndTimeFilter(e.target.value)}
             className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
             style={{ borderColor: "rgba(137,29,26,0.2)" }}
           />
@@ -253,14 +360,29 @@ export function Rooms() {
           </select>
         </div>
 
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Type</label>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+            <option value="all">All types</option>
+            <option value="Lecture">Lecture</option>
+            <option value="Lab">Lab</option>
+            <option value="Seminar">Seminar</option>
+            <option value="Auditorium">Auditorium</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Equipment</label>
+          <select value={equipmentFilter} onChange={(e) => setEquipmentFilter(e.target.value)} className={selectCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+            <option value="all">Any equipment</option>
+            {equipment.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+
         <button
           className="px-4 py-2 rounded-lg text-sm font-medium text-white"
           style={{ background: "#891D1A" }}
-          onClick={() => {
-            setCapacityFilter("all");
-            setStatusFilter("all");
-            setBuildingFilter("all");
-          }}
+          onClick={resetFilters}
         >
           Reset
         </button>
@@ -329,6 +451,24 @@ export function Rooms() {
                 </div>
 
                 <div className="px-5 pb-5">
+                  {user?.role === "admin" && (
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() => openEditRoom(room)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button
+                        onClick={() => toggleRoomStatus(room)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}
+                      >
+                        <Power className="w-3 h-3" /> {room.status === "disabled" ? "Enable" : "Disable"}
+                      </button>
+                    </div>
+                  )}
                   <button
                     onClick={() => handleBook(room.name)}
                     disabled={room.status !== "available"}
@@ -403,6 +543,16 @@ export function Rooms() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-right">
+                        {user?.role === "admin" && (
+                          <div className="flex justify-end gap-2 mb-2">
+                            <button onClick={() => openEditRoom(room)} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}>
+                              Edit
+                            </button>
+                            <button onClick={() => toggleRoomStatus(room)} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}>
+                              {room.status === "disabled" ? "Enable" : "Disable"}
+                            </button>
+                          </div>
+                        )}
                         <button
                           onClick={() => handleBook(room.name)}
                           disabled={room.status !== "available"}

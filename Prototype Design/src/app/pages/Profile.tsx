@@ -20,6 +20,7 @@ function getRoleLabel(role?: string) {
 export function Profile() {
   const { user, updateUser } = useAuth();
   const [pwOpen, setPwOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [firstName, setFirstName] = useState(user?.name?.split(" ")[0] || "");
   const [lastName, setLastName] = useState(user?.name?.split(" ").slice(1).join(" ") || "");
   const [email, setEmail] = useState(user?.email || "");
@@ -30,6 +31,15 @@ export function Profile() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+
+  const resetProfileForm = () => {
+    setFirstName(user?.name?.split(" ")[0] || "");
+    setLastName(user?.name?.split(" ").slice(1).join(" ") || "");
+    setEmail(user?.email || "");
+    setDepartment("");
+    setStudentId("");
+    setMessage("");
+  };
 
   useEffect(() => {
     if (user) {
@@ -64,6 +74,7 @@ export function Profile() {
       const updated = await updateProfile(fullName);
       updateUser(updated);
       setMessage("Profile saved.");
+      setIsEditing(false);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not save profile.");
     } finally {
@@ -136,9 +147,16 @@ export function Profile() {
           </div>
         )}
         <div className="px-6 pt-6 pb-5 border-b border-border">
-          <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
-            Personal Information
-          </h3>
+          <div className="flex items-center justify-between gap-3">
+            <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
+              Personal Information
+            </h3>
+            {!isEditing && (
+              <button onClick={() => setIsEditing(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: "rgba(137,29,26,0.3)", color: "#891D1A" }}>
+                Edit Profile
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="px-6 py-5 space-y-4">
@@ -149,8 +167,9 @@ export function Profile() {
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
+                readOnly={!isEditing}
                 className={inputCls}
-                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
             <div className="space-y-1.5">
@@ -159,8 +178,9 @@ export function Profile() {
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
+                readOnly={!isEditing}
                 className={inputCls}
-                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
           </div>
@@ -190,8 +210,9 @@ export function Profile() {
                 type="text"
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
+                readOnly={!isEditing}
                 className={inputCls + " pl-9"}
-                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
           </div>
@@ -204,22 +225,34 @@ export function Profile() {
               type="text"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
+              readOnly={!isEditing}
               className={inputCls}
-              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+              style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
             />
           </div>
 
-          <button
-            className="w-full py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors"
-            style={{ background: "#891D1A" }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
-            onClick={handleSaveProfile}
-            disabled={isSaving}
-          >
-            <Save className="w-4 h-4" />
-            {isSaving ? "Saving..." : "Save Changes"}
-          </button>
+          {isEditing && (
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium border"
+                style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
+                onClick={() => { resetProfileForm(); setIsEditing(false); }}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors"
+                style={{ background: "#891D1A" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+                onClick={handleSaveProfile}
+                disabled={isSaving}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Password section (collapsible) */}

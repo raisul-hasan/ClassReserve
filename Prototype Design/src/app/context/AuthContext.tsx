@@ -34,6 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (data.user) {
           setUser(data.user);
           localStorage.setItem('user', JSON.stringify(data.user));
+        } else {
+          setUser(null);
+          localStorage.removeItem('user');
         }
       })
       .catch(() => {
@@ -81,9 +84,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await logoutWithApi().catch(() => undefined);
     setUser(null);
     localStorage.removeItem('user');
+    await logoutWithApi().catch(() => undefined);
   };
 
   const updateUser = (nextUser: User) => {

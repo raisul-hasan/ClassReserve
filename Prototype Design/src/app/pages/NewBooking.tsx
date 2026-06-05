@@ -75,6 +75,7 @@ export function NewBooking() {
     setMessage("");
     if (step === 1) {
       if (!date || !startTime || !endTime) { setMessage("Please select date and time."); return; }
+      if (startTime >= endTime) { setMessage("End time must be after start time."); return; }
     }
     if (step === 2) {
       if (!selectedRoom) { setMessage("Please select a room."); return; }
@@ -399,7 +400,7 @@ export function NewBooking() {
           onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
-          {isSubmitting ? "Submitting..." : step === 3 ? "Submit Booking Request" : "Continue"}
+          {isSubmitting ? "Submitting..." : step === 1 ? "Search Availability" : step === 3 ? "Submit Booking Request" : "Continue"}
           {step < 3 && <ArrowRight className="w-4 h-4" />}
         </button>
       </div>

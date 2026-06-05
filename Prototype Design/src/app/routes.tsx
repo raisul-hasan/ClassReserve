@@ -16,6 +16,7 @@ import { RoomDetail } from "./pages/RoomDetail";
 import { BookingConfirmation } from "./pages/BookingConfirmation";
 import { Forum } from "./pages/Forum";
 import { IssueReports } from "./pages/IssueReports";
+import { Maintenance } from "./pages/Maintenance";
 
 export const router = createBrowserRouter([
   {
@@ -67,6 +68,7 @@ export const router = createBrowserRouter([
       { path: "rooms", Component: Rooms },
       { path: "rooms/:roomName", Component: RoomDetail },
       { path: "bookings", Component: Bookings },
+      { path: "maintenance", Component: Maintenance },
       { path: "approvals", Component: Approvals },
       { path: "notifications", Component: Notifications },
       { path: "profile", Component: Profile },

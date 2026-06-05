@@ -16,6 +16,7 @@ import {
   LogOut,
   MessageSquare,
   Flag,
+  Wrench,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { useTheme } from "../context/ThemeContext";
@@ -26,7 +27,7 @@ const adminNavigation = [
   { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { name: "Manage Requests", href: "/admin/approvals", icon: CheckSquare },
   { name: "Manage Rooms", href: "/admin/rooms", icon: DoorOpen },
-  { name: "Bookings", href: "/admin/bookings", icon: BookOpen },
+  { name: "Maintenance", href: "/admin/maintenance", icon: Wrench },
   { name: "Issue Reports", href: "/admin/issue-reports", icon: Flag },
   { name: "Calendar", href: "/admin/calendar", icon: CalendarDays },
   { name: "Notifications", href: "/admin/notifications", icon: Bell },
@@ -87,6 +88,7 @@ export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [globalSearch, setGlobalSearch] = useState("");
 
   useEffect(() => {
     getNotifications({ role: user?.role, userId: user?.id, email: user?.email })
@@ -96,7 +98,7 @@ export function Layout() {
 
   const handleLogout = () => {
     logout();
-    navigate("/auth");
+    navigate("/auth", { replace: true });
   };
 
   const handleNewBooking = () => {
@@ -111,6 +113,32 @@ export function Layout() {
     if (user?.role === "admin") { navigate("/admin/notifications"); return; }
     if (user?.role === "club") { navigate("/club/notifications"); return; }
     navigate("/student/notifications");
+  };
+
+  const handleGlobalSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = globalSearch.trim();
+    const normalized = query.toLowerCase();
+    if (!query) return;
+    const roleBase = `/${user?.role || "student"}`;
+
+    if (normalized.includes("issue") || normalized.includes("forum") || normalized.includes("problem")) {
+      navigate(user?.role === "admin" ? "/admin/issue-reports" : `${roleBase}/forum`);
+      return;
+    }
+    if (normalized.includes("booking") || normalized.includes("request") || normalized.includes("approval")) {
+      navigate(user?.role === "faculty" || user?.role === "admin" ? `${roleBase}/approvals` : `${roleBase}/bookings`);
+      return;
+    }
+    if (normalized.includes("calendar") || normalized.includes("schedule")) {
+      navigate(`${roleBase}/calendar`);
+      return;
+    }
+    if (normalized.includes("maintenance") && user?.role === "admin") {
+      navigate("/admin/maintenance");
+      return;
+    }
+    navigate(`${roleBase}/rooms`, { state: { searchQuery: query } });
   };
 
   const navigation =
@@ -209,20 +237,22 @@ export function Layout() {
           }}
         >
           <div className="flex-1 max-w-md">
-            <div className="relative">
+            <form className="relative" onSubmit={handleGlobalSearch}>
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
                 style={{ color: "#891D1A" }}
               />
               <Input
                 placeholder="Search rooms, bookings…"
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
                 className="pl-9 bg-white dark:bg-[#3A1210] border-0 rounded-full shadow-sm"
                 style={{
                   color: theme === "dark" ? "#F1E6D2" : "#210706",
                   fontFamily: "'DM Sans', sans-serif",
                 }}
               />
-            </div>
+            </form>
           </div>
 
           <div className="flex items-center gap-2 ml-4">

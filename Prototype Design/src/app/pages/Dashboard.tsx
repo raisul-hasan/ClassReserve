@@ -1,4 +1,5 @@
 import { DoorOpen, BookOpen, Clock, AlertTriangle, TrendingUp } from "lucide-react";
+import { useNavigate } from "react-router";
 import {
   BarChart,
   Bar,
@@ -95,6 +96,15 @@ function roleLabel(type: string) {
 }
 
 export function Dashboard() {
+  const navigate = useNavigate();
+  const quickActions = [
+    { label: "Manage Requests", path: "/admin/approvals" },
+    { label: "Manage Rooms", path: "/admin/rooms" },
+    { label: "Maintenance", path: "/admin/maintenance" },
+    { label: "Issue Reports", path: "/admin/issue-reports" },
+    { label: "Calendar", path: "/admin/calendar" },
+  ];
+
   return (
     <div className="space-y-6" style={DM_SANS}>
       <div>
@@ -104,6 +114,19 @@ export function Dashboard() {
         <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
           System-wide overview of the classroom booking platform
         </p>
+      </div>
+
+      <div className="bg-card rounded-xl p-4 shadow-sm flex flex-wrap gap-2">
+        {quickActions.map((action) => (
+          <button
+            key={action.path}
+            onClick={() => navigate(action.path)}
+            className="px-4 py-2 rounded-lg text-sm font-medium border hover:bg-[#891D1A]/5"
+            style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}
+          >
+            {action.label}
+          </button>
+        ))}
       </div>
 
       {/* Conflict Alert */}

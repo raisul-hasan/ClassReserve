@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Clock, BookOpen, Shield, FileText } from "lucide-react";
+import { Clock, BookOpen, Shield, FileText, X } from "lucide-react";
 import { getMyBookings } from "../services/classReserveService";
 import { useAuth } from "../context/AuthContext";
 
@@ -68,7 +68,9 @@ const tabs: { key: Tab; label: string }[] = [
 
 export function Bookings() {
   const [activeTab, setActiveTab] = useState<Tab>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
@@ -92,9 +94,16 @@ export function Bookings() {
   }, [user?.role, user?.id, user?.email]);
 
   const filtered = useMemo(() => {
-    if (activeTab === "all") return bookings;
-    return bookings.filter((b) => b.status === activeTab);
-  }, [bookings, activeTab]);
+    const byStatus = activeTab === "all" ? bookings : bookings.filter((b) => b.status === activeTab);
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return byStatus;
+    return byStatus.filter((b) => [b.eventName, b.user, b.room, b.building, b.date, b.time, b.status, b.userRole].some((value) => String(value).toLowerCase().includes(q)));
+  }, [bookings, activeTab, searchQuery]);
+
+  const cancelBooking = (id: number) => {
+    setBookings((prev) => prev.map((booking) => booking.id === id ? { ...booking, status: "cancelled" } : booking));
+    setSelectedBooking((prev) => prev?.id === id ? { ...prev, status: "cancelled" } : prev);
+  };
 
   return (
     <div className="space-y-5" style={DM_SANS}>
@@ -105,6 +114,16 @@ export function Bookings() {
         <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
           {isLoading ? "Loading booking requests..." : "All room booking requests and their current status"}
         </p>
+      </div>
+
+      <div className="bg-card rounded-xl p-4 shadow-sm">
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search bookings by event, room, requester, date, or status..."
+          className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm"
+          style={{ borderColor: "rgba(137,29,26,0.2)" }}
+        />
       </div>
 
       {/* Tab bar */}
@@ -205,13 +224,14 @@ export function Bookings() {
                     {ss.label}
                   </span>
                   <button
+                    onClick={() => setSelectedBooking(b)}
                     className="text-xs font-medium px-2.5 py-1 rounded-lg border transition-colors"
                     style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}
                   >
                     View Details
                   </button>
                   {b.status === "pending" && (
-                    <button className="text-xs font-medium" style={{ color: "#891D1A" }}>
+                    <button onClick={() => cancelBooking(b.id)} className="text-xs font-medium" style={{ color: "#891D1A" }}>
                       Cancel
                     </button>
                   )}
@@ -221,6 +241,41 @@ export function Bookings() {
           })}
         </div>
       </div>
+
+      {selectedBooking && (
+        <div className="fixed inset-0 z-40" style={{ background: "rgba(33,7,6,0.4)" }} onClick={() => setSelectedBooking(null)}>
+          <div className="absolute right-0 top-0 h-full w-96 bg-card shadow-2xl flex flex-col" style={{ borderLeft: "1px solid rgba(137,29,26,0.15)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground">Booking Details</h2>
+              <button onClick={() => setSelectedBooking(null)} className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10" style={{ color: "#5E657B" }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {[
+                ["Event", selectedBooking.eventName],
+                ["Requester", `${selectedBooking.user} (${selectedBooking.userRole})`],
+                ["Room", `${selectedBooking.room}, ${selectedBooking.building}`],
+                ["Date", selectedBooking.date],
+                ["Time", selectedBooking.time],
+                ["Status", statusStyle(selectedBooking.status).label],
+                ["Priority", priorityForRole(selectedBooking.userRole).label],
+                ["Document", selectedBooking.hasDoc ? "Attached" : "Not attached"],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: "#5E657B" }}>{label}</p>
+                  <p className="text-sm text-foreground">{value}</p>
+                </div>
+              ))}
+              {selectedBooking.status === "pending" && (
+                <button onClick={() => cancelBooking(selectedBooking.id)} className="w-full py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#891D1A" }}>
+                  Cancel Request
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
