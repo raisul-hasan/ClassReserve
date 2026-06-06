@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
 import { CheckCircle, XCircle, Clock, AlertTriangle, Bell, Info } from "lucide-react";
 import { getNotifications, markAllNotificationsRead, markNotificationRead } from "../services/classReserveService";
 import type { Notification as AppNotification } from "../types/classReserve";
@@ -17,6 +18,9 @@ type Notif = {
   time: string;
   unread: boolean;
   group: "today" | "week" | "earlier";
+  targetType?: AppNotification["targetType"];
+  targetId?: AppNotification["targetId"];
+  targetRoute?: string;
 };
 
 const initialNotifs: Notif[] = [
@@ -87,17 +91,21 @@ function timeLabel(value: string) {
 function fromServiceNotification(notification: AppNotification): Notif {
   return {
     id: notification.id,
-    type: notification.type === "warning" || notification.type === "error" || notification.type === "success" || notification.type === "info" ? notification.type : "pending",
+    type: notification.type === "warning" || notification.type === "error" || notification.type === "success" || notification.type === "pending" || notification.type === "info" ? notification.type : "pending",
     title: notification.title,
     message: notification.message,
     time: timeLabel(notification.createdAt),
     unread: notification.unread,
     group: groupForDate(notification.createdAt),
+    targetType: notification.targetType,
+    targetId: notification.targetId,
+    targetRoute: notification.targetRoute,
   };
 }
 
 export function Notifications() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notifs, setNotifs] = useState<Notif[]>([]);
   const [filter, setFilter] = useState<"all" | "unread" | NotifType>("all");
 
@@ -119,10 +127,45 @@ export function Notifications() {
   const markAllRead = async () => {
     await markAllNotificationsRead();
     setNotifs((prev) => prev.map((n) => ({ ...n, unread: false })));
+    window.dispatchEvent(new Event("classreserve:notifications-updated"));
   };
   const markRead = async (id: number) => {
     await markNotificationRead(id);
     setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, unread: false } : n)));
+    window.dispatchEvent(new Event("classreserve:notifications-updated"));
+  };
+
+  const roleBase = `/${user?.role || "student"}`;
+
+  const inferTargetType = (notif: Notif): AppNotification["targetType"] => {
+    const text = `${notif.title} ${notif.message}`.toLowerCase();
+    if (notif.targetType) return notif.targetType;
+    if (text.includes("approval") || text.includes("waiting for approval") || text.includes("new booking request")) return user?.role === "admin" || user?.role === "faculty" ? "approval" : "booking";
+    if (text.includes("booking")) return "booking";
+    if (text.includes("conflict") || text.includes("calendar")) return "calendar";
+    if (text.includes("maintenance")) return "maintenance";
+    if (text.includes("issue") || text.includes("report") || text.includes("comment")) return user?.role === "admin" ? "admin_request" : "issue";
+    if (text.includes("account") || text.includes("profile")) return "profile";
+    return "system";
+  };
+
+  const targetRouteFor = (notif: Notif) => {
+    if (notif.targetRoute) return notif.targetRoute;
+    const targetType = inferTargetType(notif);
+    const idParam = notif.targetId ? String(notif.targetId) : "";
+    const query = (key: string) => idParam ? `?${key}=${encodeURIComponent(idParam)}` : "";
+
+    if (targetType === "booking") return `${roleBase}/bookings${query("bookingId")}`;
+    if (targetType === "approval" || targetType === "admin_request") return user?.role === "admin" ? `/admin/approvals${query("bookingId")}` : `${roleBase}/approvals${query("bookingId")}`;
+    if (targetType === "calendar" || targetType === "maintenance") return `${roleBase}/calendar`;
+    if (targetType === "issue") return user?.role === "admin" ? `/admin/issue-reports${query("issueId")}` : `${roleBase}/forum${query("issueId")}`;
+    if (targetType === "profile") return `${roleBase}/profile`;
+    return `${roleBase}/notifications`;
+  };
+
+  const handleNotificationClick = async (notif: Notif) => {
+    await markRead(notif.id);
+    navigate(targetRouteFor(notif));
   };
 
   return (
@@ -163,7 +206,7 @@ export function Notifications() {
       {visibleNotifs.length === 0 && (
         <div className="py-14 text-center bg-card rounded-xl shadow-sm">
           <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" style={{ color: "#891D1A" }} />
-          <p className="text-sm" style={{ color: "#5E657B" }}>No notifications match this filter.</p>
+          <p className="text-sm" style={{ color: "#5E657B" }}>{notifs.length === 0 ? "No notifications yet." : "No notifications match this filter."}</p>
         </div>
       )}
 
@@ -184,7 +227,7 @@ export function Notifications() {
                       key={notif.id}
                       className="flex gap-4 px-5 py-4 cursor-pointer transition-colors hover:bg-[#891D1A]/4 relative"
                       style={notif.unread ? { background: "rgba(241,230,210,0.4)" } : undefined}
-                      onClick={() => markRead(notif.id)}
+                      onClick={() => handleNotificationClick(notif)}
                     >
                       {notif.unread && (
                         <div

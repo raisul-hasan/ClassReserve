@@ -44,11 +44,14 @@ export function NewBooking() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const prefilledRoom = (location.state as { roomName?: string } | null)?.roomName || "";
+  const routeState = location.state as { roomName?: string; selectedDate?: string } | null;
+  const queryDate = new URLSearchParams(location.search).get("date") || "";
+  const prefilledRoom = routeState?.roomName || "";
+  const prefilledDate = routeState?.selectedDate || queryDate;
   const hasPrefilledRoom = Boolean(prefilledRoom);
 
   const [step, setStep] = useState(1);
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(prefilledDate);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [minCapacity, setMinCapacity] = useState(1);
@@ -64,6 +67,10 @@ export function NewBooking() {
   useEffect(() => {
     setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
   }, [minCapacity]);
+
+  useEffect(() => {
+    if (prefilledDate) setDate(prefilledDate);
+  }, [prefilledDate]);
 
   const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 

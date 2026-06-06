@@ -1,5 +1,6 @@
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, useLocation } from "react-router";
 import { Layout } from "./components/Layout";
+import { useAuth, type UserRole } from "./context/AuthContext";
 import { Auth } from "./pages/Auth";
 import { Dashboard } from "./pages/Dashboard";
 import { StudentDashboard } from "./pages/StudentDashboard";
@@ -18,6 +19,22 @@ import { Forum } from "./pages/Forum";
 import { IssueReports } from "./pages/IssueReports";
 import { Maintenance } from "./pages/Maintenance";
 
+function RoleLayout({ role }: { role: UserRole }) {
+  const { user, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) return null;
+  if (!user) return <Navigate to="/auth" replace />;
+
+  if (user.role !== role) {
+    const subPath = location.pathname.split("/").slice(2).join("/");
+    const destination = subPath === "profile" ? `/${user.role}/profile` : `/${user.role}`;
+    return <Navigate to={destination} replace />;
+  }
+
+  return <Layout />;
+}
+
 export const router = createBrowserRouter([
   {
     path: "/auth",
@@ -29,7 +46,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/student",
-    Component: Layout,
+    element: <RoleLayout role="student" />,
     children: [
       { index: true, Component: StudentDashboard },
       { path: "rooms", Component: Rooms },
@@ -45,7 +62,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/club",
-    Component: Layout,
+    element: <RoleLayout role="club" />,
     children: [
       { index: true, Component: StudentDashboard },
       { path: "rooms", Component: Rooms },
@@ -61,7 +78,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/faculty",
-    Component: Layout,
+    element: <RoleLayout role="faculty" />,
     children: [
       { index: true, Component: FacultyDashboard },
       { path: "calendar", Component: Calendar },
@@ -79,7 +96,7 @@ export const router = createBrowserRouter([
   },
   {
     path: "/admin",
-    Component: Layout,
+    element: <RoleLayout role="admin" />,
     children: [
       { index: true, Component: Dashboard },
       { path: "calendar", Component: Calendar },

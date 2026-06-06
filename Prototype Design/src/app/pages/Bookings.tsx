@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { Clock, BookOpen, Shield, FileText, X } from "lucide-react";
 import { cancelBooking as cancelBookingRequest, getMyBookings } from "../services/classReserveService";
 import { useAuth } from "../context/AuthContext";
@@ -72,6 +73,7 @@ export function Bookings() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
 
   useEffect(() => {
@@ -92,6 +94,15 @@ export function Bookings() {
       })
       .finally(() => setIsLoading(false));
   }, [user?.role, user?.id, user?.email]);
+
+  useEffect(() => {
+    const bookingId = Number(searchParams.get("bookingId"));
+    if (!bookingId || bookings.length === 0) return;
+    const match = bookings.find((booking) => booking.id === bookingId);
+    if (match) {
+      setSelectedBooking(match);
+    }
+  }, [searchParams, bookings]);
 
   const filtered = useMemo(() => {
     const byStatus = activeTab === "all" ? bookings : bookings.filter((b) => b.status === activeTab);

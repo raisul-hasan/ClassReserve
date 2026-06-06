@@ -41,7 +41,7 @@ function validate_maintenance_input($pdo, $data, $excludeMaintenanceId = null)
 if ($method === 'GET') {
     require_login();
 
-    $sql = 'SELECT m.*, r.name as room_name FROM maintenance m JOIN rooms r ON m.room_id = r.id';
+    $sql = 'SELECT m.*, r.name as room_name, r.building FROM maintenance m JOIN rooms r ON m.room_id = r.id';
     $params = [];
     if (!empty($_GET['id'])) {
         $sql .= ' WHERE m.id = ?';

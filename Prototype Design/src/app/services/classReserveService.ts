@@ -116,6 +116,7 @@ function toBooking(row: any): Booking {
     id: Number(row.id),
     requesterId: row.user_id ? Number(row.user_id) : row.requesterId,
     requesterEmail: row.user_email || row.requesterEmail,
+    roomId: row.room_id ? Number(row.room_id) : row.roomId,
     title: row.title || "Room Booking",
     requesterName: row.user_name || "Requester",
     requesterRole,
@@ -128,6 +129,8 @@ function toBooking(row: any): Booking {
     priority: row.priority >= 3 ? "high" : row.priority >= 2 ? "medium" : "standard",
     status: row.status || "pending",
     hasDocument: Boolean(row.uploaded_path),
+    uploadedDocumentName: row.uploaded_path ? String(row.uploaded_path).split("/").pop() : row.uploadedDocumentName,
+    description: row.description || "",
     conflictStatus: row.conflict_status || "clear",
   };
 }
@@ -148,7 +151,9 @@ function toCalendarEventFromBooking(booking: Booking, index = 0): CalendarEvent 
   return {
     id: booking.id,
     title: booking.title,
+    roomId: booking.roomId,
     roomName: booking.roomName,
+    building: booking.building,
     requesterName: booking.requesterName,
     requesterRole: booking.requesterRole,
     requesterId: (booking as any).requesterId,
@@ -160,6 +165,9 @@ function toCalendarEventFromBooking(booking: Booking, index = 0): CalendarEvent 
     status: booking.status,
     priority: booking.priority,
     conflictStatus: eventConflictStatus(booking.conflictStatus),
+    description: booking.description,
+    uploadedDocumentName: booking.uploadedDocumentName,
+    hasDocument: booking.hasDocument,
     ownerRole: booking.requesterRole,
   };
 }
@@ -168,7 +176,9 @@ function toCalendarEventFromMaintenance(block: MaintenanceBlock, index = 0): Cal
   return {
     id: 100000 + Number(block.id || index),
     title: block.reason,
+    roomId: block.roomId,
     roomName: block.roomName,
+    building: block.building,
     requesterName: "Facilities Team",
     requesterRole: "admin",
     eventType: "maintenance",
@@ -178,6 +188,8 @@ function toCalendarEventFromMaintenance(block: MaintenanceBlock, index = 0): Cal
     status: "maintenance",
     priority: "high",
     conflictStatus: "maintenance_conflict",
+    description: block.reason,
+    maintenanceWarning: block.reason,
     ownerRole: "admin",
   };
 }
@@ -220,6 +232,9 @@ function toNotification(row: any): Notification {
     title: row.title,
     message: row.message,
     type: row.type || "info",
+    targetType: row.target_type || row.targetType,
+    targetId: row.target_id || row.targetId,
+    targetRoute: row.target_route || row.targetRoute,
     createdAt: row.created_at || row.createdAt || "",
     unread: !Boolean(row.is_read ?? row.read),
   };
@@ -394,9 +409,9 @@ const mockIssues: ClassroomIssue[] = [
 ];
 
 const mockNotifications: Notification[] = [
-  { id: 1, userId: "demo-student", type: "success", title: "Booking Approved", message: "Your booking for Room A-301 has been approved.", createdAt: "2026-06-03 09:15", unread: true },
-  { id: 2, userId: 1, type: "warning", title: "New Issue Report", message: "Projector flickering was reported for Room A-301.", createdAt: "2026-06-03 10:00", unread: true },
-  { id: 3, userId: 1, type: "info", title: "System Update", message: "ClassReserve is running in demo mode.", createdAt: "2026-06-02 08:00", unread: false },
+  { id: 1, userId: "demo-student", type: "success", title: "Booking Approved", message: "Your booking for Room A-301 has been approved.", targetType: "booking", targetId: 1, createdAt: "2026-06-03 09:15", unread: true },
+  { id: 2, userId: 1, type: "warning", title: "New Issue Report", message: "Projector flickering was reported for Room A-301.", targetType: "issue", targetId: 1, createdAt: "2026-06-03 10:00", unread: true },
+  { id: 3, userId: 1, type: "info", title: "System Update", message: "ClassReserve is running in demo mode.", targetType: "system", createdAt: "2026-06-02 08:00", unread: false },
 ];
 
 function sameOwner(ownerId: number | string | undefined, ownerEmail: string | undefined, options: UserScopedOptions = {}) {
@@ -407,6 +422,18 @@ function sameOwner(ownerId: number | string | undefined, ownerEmail: string | un
 
 function wait<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), 120));
+}
+
+function createLocalNotification(notification: Omit<Notification, "id" | "createdAt" | "unread"> & { createdAt?: string; unread?: boolean }) {
+  const notifications = loadStore<Notification[]>("notifications", mockNotifications);
+  const next: Notification = {
+    id: nextId(notifications),
+    createdAt: notification.createdAt || new Date().toISOString(),
+    unread: notification.unread ?? true,
+    ...notification,
+  };
+  saveStore("notifications", [next, ...notifications]);
+  return next;
 }
 
 export async function getSession() {
@@ -595,6 +622,16 @@ export async function createBooking(payload: Partial<Booking>) {
     conflictStatus: payload.conflictStatus || "clear",
   };
   saveStore("bookings", [...bookings, newBooking]);
+  if (payload.requesterId || payload.requesterEmail) {
+    createLocalNotification({
+      userId: payload.requesterId,
+      type: "pending",
+      title: "Booking Request Submitted",
+      message: `${newBooking.title} is waiting for approval.`,
+      targetType: "booking",
+      targetId: newBooking.id,
+    });
+  }
   return wait({ ok: true, id: newBooking.id, message: "Booking saved locally.", ...newBooking });
 }
 
@@ -713,9 +750,11 @@ export async function getMaintenanceBlocks() {
       id: Number(row.id),
       roomId: Number(row.room_id),
       roomName: row.room_name,
+      building: row.building,
       startDateTime: row.start_datetime,
       endDateTime: row.end_datetime,
       reason: row.reason || "Maintenance",
+      createdBy: row.created_by || "Admin",
     }));
   } catch {
     return wait(loadStore<MaintenanceBlock[]>("maintenance", mockMaintenance));
@@ -883,7 +922,9 @@ export async function getNotifications(options: UserScopedOptions = {}) {
       ? notifications.filter((notification) => sameOwner(notification.userId, undefined, options))
       : notifications;
   } catch {
-    return wait(loadStore<Notification[]>("notifications", mockNotifications).filter((notification) => sameOwner(notification.userId, undefined, options)));
+    return wait(loadStore<Notification[]>("notifications", mockNotifications).filter((notification) =>
+      sameOwner(notification.userId, typeof notification.userId === "string" && notification.userId.includes("@") ? notification.userId : undefined, options)
+    ));
   }
 }
 

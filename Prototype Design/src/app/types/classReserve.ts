@@ -24,6 +24,7 @@ export interface Booking {
   id: number;
   requesterId?: number | string;
   requesterEmail?: string;
+  roomId?: number | string;
   title: string;
   requesterName: string;
   requesterRole: UserRole;
@@ -36,6 +37,8 @@ export interface Booking {
   priority: BookingPriority;
   status: BookingStatus;
   hasDocument: boolean;
+  uploadedDocumentName?: string;
+  description?: string;
   conflictStatus?: "clear" | "conflict" | "maintenance";
   rejectionReason?: string;
 }
@@ -44,18 +47,22 @@ export interface MaintenanceBlock {
   id: number;
   roomId: number;
   roomName: string;
+  building?: string;
   startDateTime: string;
   endDateTime: string;
   reason: string;
+  createdBy?: string;
 }
 
 export interface CalendarEvent {
   id: number;
   title: string;
+  roomId?: number | string;
   roomName: string;
+  building?: string;
   requesterName: string;
   requesterRole: UserRole;
-  requesterId?: number;
+  requesterId?: number | string;
   requesterEmail?: string;
   eventType: CalendarEventType;
   date: string;
@@ -64,6 +71,10 @@ export interface CalendarEvent {
   status: BookingStatus | "maintenance";
   priority: BookingPriority;
   conflictStatus: CalendarConflictStatus;
+  description?: string;
+  maintenanceWarning?: string;
+  uploadedDocumentName?: string;
+  hasDocument?: boolean;
   ownerRole?: UserRole;
 }
 
@@ -72,7 +83,10 @@ export interface Notification {
   userId?: number | string;
   title: string;
   message: string;
-  type: "success" | "warning" | "error" | "info";
+  type: "success" | "warning" | "error" | "pending" | "info";
+  targetType?: "booking" | "approval" | "calendar" | "maintenance" | "issue" | "admin_request" | "profile" | "system";
+  targetId?: number | string;
+  targetRoute?: string;
   createdAt: string;
   unread: boolean;
 }

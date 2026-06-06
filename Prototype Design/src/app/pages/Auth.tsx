@@ -84,10 +84,12 @@ export function Auth() {
 
     setIsSubmitting(true);
     try {
-      await signup(signupName, signupEmail, signupPassword, selectedRole);
-      setMessage("Account created. Please sign in.");
-      setActiveTab("login");
-      setLoginEmail(signupEmail);
+      const newUser = await signup(signupName, signupEmail, signupPassword, selectedRole);
+      setMessage("Account created.");
+      if (newUser.role === "student") navigate("/student");
+      else if (newUser.role === "club") navigate("/club");
+      else if (newUser.role === "faculty") navigate("/faculty");
+      else navigate("/admin");
       setSignupName("");
       setSignupEmail("");
       setSignupPassword("");

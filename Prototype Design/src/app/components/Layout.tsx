@@ -91,9 +91,14 @@ export function Layout() {
   const [globalSearch, setGlobalSearch] = useState("");
 
   useEffect(() => {
-    getNotifications({ role: user?.role, userId: user?.id, email: user?.email })
-      .then((items) => setUnreadCount(items.filter((item) => item.unread).length))
-      .catch(() => setUnreadCount(0));
+    const refreshUnread = () => {
+      getNotifications({ role: user?.role, userId: user?.id, email: user?.email })
+        .then((items) => setUnreadCount(items.filter((item) => item.unread).length))
+        .catch(() => setUnreadCount(0));
+    };
+    refreshUnread();
+    window.addEventListener("classreserve:notifications-updated", refreshUnread);
+    return () => window.removeEventListener("classreserve:notifications-updated", refreshUnread);
   }, [user?.role, user?.id, user?.email]);
 
   const handleLogout = () => {

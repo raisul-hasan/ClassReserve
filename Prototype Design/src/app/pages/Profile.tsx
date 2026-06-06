@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { Mail, Building2, ChevronDown, ChevronUp, Save } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import { changePassword, getProfile, updateProfile } from "../services/classReserveService";
+import type { User } from "../context/AuthContext";
+import { changePassword, updateProfile } from "../services/classReserveService";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+type ProfileExtras = {
+  department: string;
+  profileId: string;
+  phone: string;
+  recentActivity: string[];
+};
 
 function getInitials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -17,66 +25,151 @@ function getRoleLabel(role?: string) {
   return "Student";
 }
 
+function splitName(name?: string) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function getProfileStorageKey(user: User | null) {
+  return `classreserve.profile.${user?.id || user?.email || "guest"}`;
+}
+
+function loadProfileExtras(user: User | null): ProfileExtras {
+  const defaults: ProfileExtras = { department: "", profileId: "", phone: "", recentActivity: [] };
+  if (!user) return defaults;
+
+  try {
+    const saved = localStorage.getItem(getProfileStorageKey(user));
+    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function saveProfileExtras(user: User, extras: ProfileExtras) {
+  localStorage.setItem(getProfileStorageKey(user), JSON.stringify(extras));
+}
+
+function getDepartmentLabel(role?: string) {
+  if (role === "club") return "Club Category / Department";
+  if (role === "admin") return "Office / Department";
+  return "Department";
+}
+
+function getIdLabel(role?: string) {
+  if (role === "faculty") return "Faculty ID";
+  if (role === "club") return "Club ID";
+  if (role === "admin") return "Staff ID";
+  return "Student ID";
+}
+
+function isValidPhone(phone: string) {
+  return !phone || /^[+()\-\s\d]{7,20}$/.test(phone);
+}
+
 export function Profile() {
   const { user, updateUser } = useAuth();
+  const initialName = splitName(user?.name);
   const [pwOpen, setPwOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [firstName, setFirstName] = useState(user?.name?.split(" ")[0] || "");
-  const [lastName, setLastName] = useState(user?.name?.split(" ").slice(1).join(" ") || "");
+  const [firstName, setFirstName] = useState(initialName.firstName);
+  const [lastName, setLastName] = useState(initialName.lastName);
   const [email, setEmail] = useState(user?.email || "");
   const [department, setDepartment] = useState("");
-  const [studentId, setStudentId] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [recentActivity, setRecentActivity] = useState<string[]>([]);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
+  const applyProfileForm = (profileUser: User | null) => {
+    const name = splitName(profileUser?.name);
+    const extras = loadProfileExtras(profileUser);
+    setFirstName(name.firstName);
+    setLastName(name.lastName);
+    setEmail(profileUser?.email || "");
+    setDepartment(extras.department);
+    setProfileId(extras.profileId);
+    setPhone(extras.phone);
+    setRecentActivity(extras.recentActivity || []);
+  };
+
   const resetProfileForm = () => {
-    setFirstName(user?.name?.split(" ")[0] || "");
-    setLastName(user?.name?.split(" ").slice(1).join(" ") || "");
-    setEmail(user?.email || "");
-    setDepartment("");
-    setStudentId("");
+    applyProfileForm(user);
     setMessage("");
   };
 
   useEffect(() => {
     if (user) {
-      setFirstName(user.name?.split(" ")[0] || "");
-      setLastName(user.name?.split(" ").slice(1).join(" ") || "");
-      setEmail(user.email || "");
+      applyProfileForm(user);
     }
-
-    getProfile()
-      .then((apiUser) => {
-        updateUser(apiUser);
-        setFirstName(apiUser.name?.split(" ")[0] || "");
-        setLastName(apiUser.name?.split(" ").slice(1).join(" ") || "");
-        setEmail(apiUser.email || "");
-      })
-      .catch(() => undefined);
-  }, [user?.email]);
+  }, [user?.id, user?.email]);
 
   const inputCls =
     "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
 
   const handleSaveProfile = async () => {
-    const fullName = `${firstName} ${lastName}`.trim();
-    if (!fullName) {
-      setMessage("Name is required.");
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanFirstName) {
+      setMessage("First name is required.");
       return;
     }
+
+    if (!cleanLastName) {
+      setMessage("Last name is required.");
+      return;
+    }
+
+    if (!isValidPhone(cleanPhone)) {
+      setMessage("Phone number can only include numbers, spaces, +, -, and parentheses.");
+      return;
+    }
+
+    const fullName = `${cleanFirstName} ${cleanLastName}`.trim();
+    const activity = [`Profile updated ${new Date().toLocaleDateString()}`, ...recentActivity].slice(0, 5);
+    const extras: ProfileExtras = {
+      department: department.trim(),
+      profileId: profileId.trim(),
+      phone: cleanPhone,
+      recentActivity: activity,
+    };
 
     setIsSaving(true);
     setMessage("");
     try {
-      const updated = await updateProfile(fullName);
-      updateUser(updated);
+      await updateProfile(fullName);
+      if (!user) {
+        setMessage("Could not save profile.");
+        return;
+      }
+
+      const nextUser = { ...user, name: fullName };
+      updateUser(nextUser);
+      saveProfileExtras(nextUser, extras);
+      setRecentActivity(activity);
       setMessage("Profile saved.");
       setIsEditing(false);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save profile.");
+      if (!user) {
+        setMessage(error instanceof Error ? error.message : "Could not save profile.");
+        return;
+      }
+
+      const nextUser = { ...user, name: fullName };
+      updateUser(nextUser);
+      saveProfileExtras(nextUser, extras);
+      setRecentActivity(activity);
+      setMessage("Profile saved locally.");
+      setIsEditing(false);
     } finally {
       setIsSaving(false);
     }
@@ -89,6 +182,10 @@ export function Profile() {
     }
     if (newPassword !== confirmPassword) {
       setMessage("New password and confirmation do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setMessage("New password must be at least 6 characters.");
       return;
     }
 
@@ -110,7 +207,6 @@ export function Profile() {
 
   return (
     <div className="space-y-0 max-w-2xl" style={DM_SANS}>
-      {/* Header Banner */}
       <div
         className="rounded-t-2xl p-8 flex flex-col items-center gap-3"
         style={{
@@ -136,7 +232,6 @@ export function Profile() {
         </div>
       </div>
 
-      {/* Main card */}
       <div className="bg-card rounded-b-2xl shadow-sm overflow-hidden">
         {message && (
           <div
@@ -146,13 +241,18 @@ export function Profile() {
             {message}
           </div>
         )}
+
         <div className="px-6 pt-6 pb-5 border-b border-border">
           <div className="flex items-center justify-between gap-3">
             <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
               Personal Information
             </h3>
             {!isEditing && (
-              <button onClick={() => setIsEditing(true)} className="px-3 py-1.5 rounded-lg text-xs font-medium border" style={{ borderColor: "rgba(137,29,26,0.3)", color: "#891D1A" }}>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                style={{ borderColor: "rgba(137,29,26,0.3)", color: "#891D1A" }}
+              >
                 Edit Profile
               </button>
             )}
@@ -162,23 +262,29 @@ export function Profile() {
         <div className="px-6 py-5 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>First Name</label>
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                First Name
+              </label>
               <input
                 type="text"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 readOnly={!isEditing}
+                required
                 className={inputCls}
                 style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Last Name</label>
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                Last Name
+              </label>
               <input
                 type="text"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 readOnly={!isEditing}
+                required
                 className={inputCls}
                 style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
@@ -186,14 +292,16 @@ export function Profile() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Email Address</label>
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Email Address
+            </label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
               <input
                 type="email"
                 value={email}
                 readOnly
-                className={inputCls + " pl-9"}
+                className={`${inputCls} pl-9`}
                 style={{ borderColor: "rgba(137,29,26,0.2)", opacity: 0.75 }}
               />
             </div>
@@ -203,7 +311,9 @@ export function Profile() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Department</label>
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              {getDepartmentLabel(user?.role)}
+            </label>
             <div className="relative">
               <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
               <input
@@ -211,7 +321,7 @@ export function Profile() {
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
                 readOnly={!isEditing}
-                className={inputCls + " pl-9"}
+                className={`${inputCls} pl-9`}
                 style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
@@ -219,13 +329,28 @@ export function Profile() {
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
-              {user?.role === "faculty" ? "Faculty ID" : "Student ID"}
+              {getIdLabel(user?.role)}
             </label>
             <input
               type="text"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
               readOnly={!isEditing}
+              className={inputCls}
+              style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              readOnly={!isEditing}
+              placeholder="+880 1XXX XXXXXX"
               className={inputCls}
               style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
             />
@@ -236,7 +361,10 @@ export function Profile() {
               <button
                 className="flex-1 py-2.5 rounded-lg text-sm font-medium border"
                 style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
-                onClick={() => { resetProfileForm(); setIsEditing(false); }}
+                onClick={() => {
+                  resetProfileForm();
+                  setIsEditing(false);
+                }}
               >
                 Cancel
               </button>
@@ -255,7 +383,6 @@ export function Profile() {
           )}
         </div>
 
-        {/* Password section (collapsible) */}
         <div className="border-t border-border">
           <button
             onClick={() => setPwOpen((v) => !v)}
@@ -274,28 +401,44 @@ export function Profile() {
           {pwOpen && (
             <div className="px-6 pb-5 space-y-4">
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Current Password</label>
-                <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} placeholder="Current password" className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Current password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>New Password</label>
-                <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
               </div>
               <div className="space-y-1.5">
-                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Confirm New Password</label>
-                <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
               </div>
-              {false && ["Current Password", "New Password", "Confirm New Password"].map((label) => (
-                <div key={label} className="space-y-1.5">
-                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>{label}</label>
-                  <input
-                    type="password"
-                    placeholder="••••••••"
-                    className={inputCls}
-                    style={{ borderColor: "rgba(137,29,26,0.2)" }}
-                  />
-                </div>
-              ))}
               <button
                 className="w-full py-2.5 rounded-lg text-sm font-medium border transition-colors"
                 style={{ borderColor: "#891D1A", color: "#891D1A" }}
@@ -311,6 +454,25 @@ export function Profile() {
                 {isSaving ? "Updating..." : "Update Password"}
               </button>
             </div>
+          )}
+        </div>
+
+        <div className="border-t border-border px-6 py-5">
+          <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground mb-3">
+            Recent Activity
+          </h3>
+          {recentActivity.length > 0 ? (
+            <div className="space-y-2">
+              {recentActivity.map((activity) => (
+                <p key={activity} className="text-sm" style={{ color: "#5E657B" }}>
+                  {activity}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: "#5E657B" }}>
+              No recent activity yet.
+            </p>
           )}
         </div>
       </div>

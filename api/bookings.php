@@ -115,6 +115,13 @@ if ($method === 'POST') {
         $uploaded_path
     ]);
     $bookingId = $pdo->lastInsertId();
+    create_notification(
+        $pdo,
+        $user['id'],
+        'pending',
+        'Booking Request Submitted',
+        ($input['title'] ?? 'Your booking request') . ' is waiting for approval.'
+    );
     create_role_notification(
         $pdo,
         ['admin', 'faculty'],

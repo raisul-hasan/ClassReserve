@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import {
   MessageSquare, ThumbsUp, Plus, X, Search, Upload, AlertTriangle,
   Wrench, Monitor, Wind, Trash2, Armchair, Users, HelpCircle,
@@ -260,6 +261,7 @@ function fromServiceIssue(issue: ClassroomIssue): Issue {
 
 export function Forum() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
 
   const [issues, setIssues] = useState<Issue[]>(initialIssues);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
@@ -276,6 +278,15 @@ export function Forum() {
     });
     return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    const issueId = Number(searchParams.get("issueId"));
+    if (!issueId || issues.length === 0) return;
+    const match = issues.find((issue) => issue.id === issueId);
+    if (match) {
+      setSelectedIssue(match);
+    }
+  }, [searchParams, issues]);
 
   // Create form state
   const [form, setForm] = useState({
