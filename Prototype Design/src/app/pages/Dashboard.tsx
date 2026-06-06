@@ -103,6 +103,7 @@ export function Dashboard() {
     { label: "Maintenance", path: "/admin/maintenance" },
     { label: "Issue Reports", path: "/admin/issue-reports" },
     { label: "Calendar", path: "/admin/calendar" },
+    { label: "Settings", path: "/admin/settings" },
   ];
 
   return (

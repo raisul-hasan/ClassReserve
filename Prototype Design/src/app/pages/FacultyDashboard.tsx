@@ -116,7 +116,7 @@ export function FacultyDashboard() {
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
           <Plus className="w-4 h-4" />
-          Quick Reserve
+          Reserve Room
         </button>
       </div>
 
@@ -179,7 +179,7 @@ export function FacultyDashboard() {
                     style={{ color: "#891D1A" }}
                     onClick={() => navigate("/faculty/new-booking", { state: { roomName: room.name } })}
                   >
-                    Book
+                    Reserve
                   </button>
                 )}
               </div>

@@ -68,7 +68,12 @@ export function RoomDetail() {
 
   const decodedName = decodeURIComponent(roomName || "");
   const room = roomData[decodedName];
-  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : "/student";
+  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
+  const isAdmin = user?.role === "admin";
+  const ctaLabel =
+    user?.role === "faculty" ? "Reserve this Room" :
+    user?.role === "club" ? "Book Event Room" :
+    "Book This Room";
 
   if (!room) {
     return (
@@ -185,18 +190,27 @@ export function RoomDetail() {
         </div>
       </div>
 
-      {/* Sticky Book CTA */}
       <div className="sticky bottom-6">
-        <button
-          onClick={() => navigate(`${base}/new-booking`, { state: { roomName: room.name } })}
-          disabled={room.status !== "available"}
-          className="w-full py-3 rounded-full text-[#F1E6D2] font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-lg"
-          style={{ ...PLAYFAIR, background: "#891D1A", fontSize: 15 }}
-          onMouseEnter={(e) => { if (room.status === "available") e.currentTarget.style.background = "#210706"; }}
-          onMouseLeave={(e) => { if (room.status === "available") e.currentTarget.style.background = "#891D1A"; }}
-        >
-          Book This Room
-        </button>
+        {isAdmin ? (
+          <button
+            onClick={() => navigate("/admin/maintenance")}
+            className="w-full py-3 rounded-full text-[#F1E6D2] font-medium text-sm transition-colors shadow-lg"
+            style={{ ...PLAYFAIR, background: "#891D1A", fontSize: 15 }}
+          >
+            Manage Maintenance
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate(`${base}/new-booking`, { state: { roomName: room.name } })}
+            disabled={room.status !== "available"}
+            className="w-full py-3 rounded-full text-[#F1E6D2] font-medium text-sm disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-lg"
+            style={{ ...PLAYFAIR, background: "#891D1A", fontSize: 15 }}
+            onMouseEnter={(e) => { if (room.status === "available") e.currentTarget.style.background = "#210706"; }}
+            onMouseLeave={(e) => { if (room.status === "available") e.currentTarget.style.background = "#891D1A"; }}
+          >
+            {ctaLabel}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -88,8 +88,11 @@ export function Rooms() {
   const equipment = Array.from(new Set(rooms.flatMap((r) => r.equipment))).sort();
 
   const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
+  const isAdmin = user?.role === "admin";
+  const bookActionLabel = user?.role === "faculty" ? "Reserve this Room" : user?.role === "club" ? "Book Event Room" : "Book this Room";
 
   const handleBook = (roomName: string) => {
+    if (isAdmin) return;
     navigate(`${base}/new-booking`, { state: { roomName } });
   };
 
@@ -467,18 +470,27 @@ export function Rooms() {
                       >
                         <Power className="w-3 h-3" /> {room.status === "disabled" ? "Enable" : "Disable"}
                       </button>
+                      <button
+                        onClick={() => navigate("/admin/maintenance")}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#B8860B" }}
+                      >
+                        Maintenance
+                      </button>
                     </div>
                   )}
-                  <button
-                    onClick={() => handleBook(room.name)}
-                    disabled={room.status !== "available"}
-                    className="w-full py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                    style={{ background: "#891D1A" }}
-                    onMouseEnter={(e) => { if (room.status === "available") e.currentTarget.style.background = "#210706"; }}
-                    onMouseLeave={(e) => { if (room.status === "available") e.currentTarget.style.background = "#891D1A"; }}
-                  >
-                    {room.status === "available" ? "Book Now" : s.label}
-                  </button>
+                  {!isAdmin && (
+                    <button
+                      onClick={() => handleBook(room.name)}
+                      disabled={room.status !== "available"}
+                      className="w-full py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: "#891D1A" }}
+                      onMouseEnter={(e) => { if (room.status === "available") e.currentTarget.style.background = "#210706"; }}
+                      onMouseLeave={(e) => { if (room.status === "available") e.currentTarget.style.background = "#891D1A"; }}
+                    >
+                      {room.status === "available" ? bookActionLabel : s.label}
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -551,16 +563,21 @@ export function Rooms() {
                             <button onClick={() => toggleRoomStatus(room)} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}>
                               {room.status === "disabled" ? "Enable" : "Disable"}
                             </button>
+                            <button onClick={() => navigate("/admin/maintenance")} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#B8860B" }}>
+                              Maintenance
+                            </button>
                           </div>
                         )}
-                        <button
-                          onClick={() => handleBook(room.name)}
-                          disabled={room.status !== "available"}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40"
-                          style={{ background: "#891D1A" }}
-                        >
-                          Book Now
-                        </button>
+                        {!isAdmin && (
+                          <button
+                            onClick={() => handleBook(room.name)}
+                            disabled={room.status !== "available"}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40"
+                            style={{ background: "#891D1A" }}
+                          >
+                            {room.status === "available" ? bookActionLabel : s.label}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

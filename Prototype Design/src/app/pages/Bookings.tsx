@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Clock, BookOpen, Shield, FileText, X } from "lucide-react";
 import { cancelBooking as cancelBookingRequest, getMyBookings } from "../services/classReserveService";
 import { useAuth } from "../context/AuthContext";
@@ -68,6 +68,7 @@ const tabs: { key: Tab; label: string }[] = [
 ];
 
 export function Bookings() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<Tab>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [bookings, setBookings] = useState<BookingRow[]>([]);
@@ -75,6 +76,13 @@ export function Bookings() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const isFaculty = user?.role === "faculty";
+  const pageTitle = isFaculty ? "My Reservations" : "My Bookings";
+  const pageDescription = isFaculty ? "Your faculty room reservations and their current status" : "Your room booking requests and their current status";
+
+  useEffect(() => {
+    if (user?.role === "admin") navigate("/admin/approvals", { replace: true });
+  }, [user?.role, navigate]);
 
   useEffect(() => {
     getMyBookings({ role: user?.role || "student", userId: user?.id, email: user?.email })
@@ -124,10 +132,10 @@ export function Bookings() {
     <div className="space-y-5" style={DM_SANS}>
       <div>
         <h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">
-          Bookings
+          {pageTitle}
         </h1>
         <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-          {isLoading ? "Loading booking requests..." : "All room booking requests and their current status"}
+          {isLoading ? "Loading booking requests..." : pageDescription}
         </p>
       </div>
 

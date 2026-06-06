@@ -113,6 +113,7 @@ export function Calendar() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>("all");
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const isAdmin = user?.role === "admin";
 
   useEffect(() => {
     let mounted = true;
@@ -121,6 +122,10 @@ export function Calendar() {
     });
     return () => { mounted = false; };
   }, [user?.role, user?.id, user?.email]);
+
+  useEffect(() => {
+    if (isAdmin && activeFilter === "mine") setActiveFilter("all");
+  }, [isAdmin, activeFilter]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -151,7 +156,7 @@ export function Calendar() {
   };
 
   const isOwnEvent = (event: CalendarEvent) => {
-    if (!user) return false;
+    if (!user || user.role === "admin") return false;
     return Boolean(
       (event.requesterId && user.id && event.requesterId === user.id) ||
       (event.requesterEmail && event.requesterEmail.toLowerCase() === user.email.toLowerCase())
@@ -165,6 +170,10 @@ export function Calendar() {
     if (user.role === "faculty" && event.status === "pending" && ["student", "club"].includes(event.requesterRole)) return true;
     return false;
   };
+
+  const visibleFilterPills = FILTER_PILLS
+    .filter((pill) => !(isAdmin && pill.key === "mine"))
+    .map((pill) => user?.role === "faculty" && pill.key === "mine" ? { ...pill, label: "My Reservations" } : pill);
 
   const filteredEvents = events.filter((event) => {
     if (activeFilter === "mine") return isOwnEvent(event);
@@ -193,6 +202,10 @@ export function Calendar() {
     const selectedDate = dayStr(day);
     setSelectedDay(day);
     setSelectedEvent(null);
+    if (isAdmin) {
+      setDrawerOpen(true);
+      return;
+    }
     navigate(`${roleBase}/new-booking?date=${selectedDate}`, { state: { selectedDate } });
   };
 
@@ -235,7 +248,7 @@ export function Calendar() {
               { label: "Club", color: "#5E657B" },
               { label: "Student", color: "#B8860B" },
               { label: "Maintenance", color: "#210706" },
-              { label: "My Booking", color: "#14B8A6" },
+              ...(!isAdmin ? [{ label: user?.role === "faculty" ? "My Reservation" : "My Booking", color: "#14B8A6" }] : []),
             ].map((l) => (
               <div key={l.label} className="flex items-center gap-1">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ background: l.color }} />
@@ -269,7 +282,7 @@ export function Calendar() {
 
       {/* Filter pills */}
       <div className="flex items-center gap-2 flex-wrap">
-        {FILTER_PILLS.map((pill) => {
+        {visibleFilterPills.map((pill) => {
           const active = activeFilter === pill.key;
           return (
             <button
@@ -313,13 +326,15 @@ export function Calendar() {
               <h3 className="text-foreground" style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }}>
                 {formatLongDate(activeDateObject)}
               </h3>
-              <button
-                onClick={() => navigate(`${roleBase}/new-booking?date=${activeDate}`, { state: { selectedDate: activeDate } })}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium border"
-                style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}
-              >
-                New Booking
-              </button>
+              {!isAdmin && (
+                <button
+                  onClick={() => navigate(`${roleBase}/new-booking?date=${activeDate}`, { state: { selectedDate: activeDate } })}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                  style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}
+                >
+                  {user?.role === "faculty" ? "Reserve Room" : user?.role === "club" ? "Event Booking" : "New Booking"}
+                </button>
+              )}
             </div>
 
             {selectedEvents.length === 0 ? (
@@ -392,6 +407,10 @@ export function Calendar() {
                       setCurrentYear(dateObject.getFullYear());
                       setCurrentMonth(dateObject.getMonth());
                       setSelectedDay(dateObject.getDate());
+                      if (isAdmin) {
+                        setDrawerOpen(true);
+                        return;
+                      }
                       navigate(`${roleBase}/new-booking?date=${date}`, { state: { selectedDate: date } });
                     }}
                   >

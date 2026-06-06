@@ -50,6 +50,8 @@ export function Approvals() {
   const [rejectingRequest, setRejectingRequest] = useState<ApprovalRequest | null>(null);
   const [rejectReason, setRejectReason] = useState("");
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+  const isFaculty = user?.role === "faculty";
 
   useEffect(() => {
     getPendingApprovals(user?.role || "faculty")
@@ -74,15 +76,19 @@ export function Approvals() {
       .finally(() => setIsLoading(false));
   }, [user?.role]);
 
-  const pending = useMemo(() => requests.filter((r) => r.status === "pending"), [requests]);
-  const reviewed = useMemo(() => requests.filter((r) => r.status !== "pending"), [requests]);
+  const roleScopedRequests = useMemo(() => {
+    if (!isFaculty) return requests;
+    return requests.filter((r) => ["Student", "Club"].includes(r.role));
+  }, [requests, isFaculty]);
+  const roleScopedPending = useMemo(() => roleScopedRequests.filter((r) => r.status === "pending"), [roleScopedRequests]);
+  const roleScopedReviewed = useMemo(() => roleScopedRequests.filter((r) => r.status !== "pending"), [roleScopedRequests]);
   const visibleRequests = useMemo(() => {
-    return requests
+    return roleScopedRequests
       .filter((r) => statusFilter === "all" || r.status === statusFilter)
       .filter((r) => roleFilter === "all" || r.role === roleFilter)
       .filter((r) => priorityFilter === "all" || r.priority === priorityFilter)
       .sort((a, b) => ({ high: 3, medium: 2, low: 1 }[b.priority] - { high: 3, medium: 2, low: 1 }[a.priority]));
-  }, [requests, statusFilter, roleFilter, priorityFilter]);
+  }, [roleScopedRequests, statusFilter, roleFilter, priorityFilter]);
 
   const approve = async (id: number) => {
     await approveBooking(id);
@@ -110,17 +116,17 @@ export function Approvals() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">
-            Approvals
+            {isAdmin ? "Manage Requests" : "Approvals"}
           </h1>
           <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-            {isLoading ? "Loading approval queue..." : "Review and action pending booking requests"}
+            {isLoading ? "Loading approval queue..." : isAdmin ? "Review and manage all reservation requests" : "Review student and club booking requests"}
           </p>
         </div>
         <div
           className="px-3 py-1.5 rounded-full text-sm font-medium"
           style={{ background: "rgba(184,134,11,0.1)", color: "#B8860B" }}
         >
-          {pending.length} pending
+          {roleScopedPending.length} pending
         </div>
       </div>
 
@@ -128,10 +134,10 @@ export function Approvals() {
         {/* Pending — wider column */}
         <div className="xl:col-span-3 space-y-3">
           <h3 className="text-sm font-semibold" style={{ color: "#5E657B" }}>
-            PENDING REQUESTS ({pending.length})
+            PENDING REQUESTS ({roleScopedPending.length})
           </h3>
 
-          {pending.map((req) => {
+          {roleScopedPending.map((req) => {
             const ps = priorityStyle(req.priority, req.role);
             return (
               <div
@@ -205,13 +211,13 @@ export function Approvals() {
                     </button>
                     <button
                       onClick={() => approve(req.id)}
-                      disabled={req.hasConflict && user?.role !== "admin"}
+                      disabled={req.hasConflict && !isAdmin}
                       className="flex-1 py-2 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       style={{ background: "#3B6E4A" }}
                       onMouseEnter={(e) => { if (!req.hasConflict) e.currentTarget.style.background = "#2d5437"; }}
                       onMouseLeave={(e) => { if (!req.hasConflict) e.currentTarget.style.background = "#3B6E4A"; }}
                     >
-                      <Check className="w-4 h-4" /> {req.hasConflict && user?.role === "admin" ? "Override Approve" : "Approve"}
+                      <Check className="w-4 h-4" /> {req.hasConflict && isAdmin ? "Override Approve" : "Approve"}
                     </button>
                   </div>
                 </div>
@@ -219,7 +225,7 @@ export function Approvals() {
             );
           })}
 
-          {pending.length === 0 && (
+          {roleScopedPending.length === 0 && (
             <div className="bg-card rounded-xl p-8 text-center shadow-sm">
               <Check className="w-10 h-10 mx-auto mb-2" style={{ color: "#3B6E4A", opacity: 0.5 }} />
               <p className="text-sm" style={{ color: "#5E657B" }}>All caught up! No pending requests.</p>
@@ -230,10 +236,10 @@ export function Approvals() {
         {/* Recently Reviewed — narrower column */}
         <div className="xl:col-span-2 space-y-3">
           <h3 className="text-sm font-semibold" style={{ color: "#5E657B" }}>
-            RECENTLY REVIEWED ({reviewed.length})
+            RECENTLY REVIEWED ({roleScopedReviewed.length})
           </h3>
 
-          {reviewed.map((req) => {
+          {roleScopedReviewed.map((req) => {
             const isApproved = req.status === "approved";
             return (
               <div
@@ -267,7 +273,7 @@ export function Approvals() {
       <div className="bg-card rounded-xl p-4 shadow-sm flex flex-wrap gap-3 items-end">
         {[
           { label: "Status", value: statusFilter, onChange: setStatusFilter, options: [["all", "All"], ["pending", "Pending"], ["approved", "Approved"], ["rejected", "Rejected"]] },
-          { label: "Role", value: roleFilter, onChange: setRoleFilter, options: [["all", "All Roles"], ["Student", "Student"], ["Club", "Club"], ["Faculty", "Faculty"]] },
+          { label: "Role", value: roleFilter, onChange: setRoleFilter, options: isAdmin ? [["all", "All Roles"], ["Student", "Student"], ["Club", "Club"], ["Faculty", "Faculty"]] : [["all", "All Roles"], ["Student", "Student"], ["Club", "Club"]] },
           { label: "Priority", value: priorityFilter, onChange: setPriorityFilter, options: [["all", "All Priorities"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]] },
         ].map((filter) => (
           <div key={filter.label} className="flex items-center gap-2">
@@ -300,7 +306,7 @@ export function Approvals() {
                   {req.status === "pending" && (
                     <>
                       <button onClick={() => { setRejectingRequest(req); setRejectReason(""); }} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white" style={{ background: "#891D1A" }}>Reject</button>
-                      <button onClick={() => approve(req.id)} disabled={req.hasConflict && user?.role !== "admin"} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40" style={{ background: "#3B6E4A" }}>{req.hasConflict && user?.role === "admin" ? "Override Approve" : "Approve"}</button>
+                      <button onClick={() => approve(req.id)} disabled={req.hasConflict && !isAdmin} className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40" style={{ background: "#3B6E4A" }}>{req.hasConflict && isAdmin ? "Override Approve" : "Approve"}</button>
                     </>
                   )}
                 </div>

@@ -60,7 +60,7 @@ const facultyNavigation = [
   { name: "Dashboard", href: "/faculty", icon: LayoutDashboard },
   { name: "Reserve Room", href: "/faculty/rooms", icon: DoorOpen },
   { name: "Approvals", href: "/faculty/approvals", icon: CheckSquare },
-  { name: "My Bookings", href: "/faculty/bookings", icon: BookOpen },
+  { name: "My Reservations", href: "/faculty/bookings", icon: BookOpen },
   { name: "Calendar", href: "/faculty/calendar", icon: CalendarDays },
   { name: "Classroom Forum", href: "/faculty/forum", icon: MessageSquare },
   { name: "Notifications", href: "/faculty/notifications", icon: Bell },
@@ -108,7 +108,6 @@ export function Layout() {
 
   const handleNewBooking = () => {
     if (user?.role === "faculty") { navigate("/faculty/new-booking"); return; }
-    if (user?.role === "admin") { navigate("/admin/new-booking"); return; }
     if (user?.role === "club") { navigate("/club/new-booking"); return; }
     navigate("/student/new-booking");
   };
@@ -152,7 +151,11 @@ export function Layout() {
     user?.role === "club" ? clubNavigation :
     studentNavigation;
 
-  const quickActionText = user?.role === "faculty" ? "Quick Reserve" : "New Booking";
+  const quickActionText =
+    user?.role === "faculty" ? "Reserve Room" :
+    user?.role === "club" ? "Event Booking" :
+    "New Booking";
+  const showRequesterQuickAction = user?.role !== "admin";
 
   return (
     <div className="flex h-screen bg-background transition-colors">
@@ -285,19 +288,21 @@ export function Layout() {
               )}
             </button>
 
-            <button
-              onClick={handleNewBooking}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-[#F1E6D2] transition-colors"
-              style={{
-                background: "#891D1A",
-                fontFamily: "'DM Sans', sans-serif",
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
-            >
-              <Plus className="w-4 h-4" />
-              {quickActionText}
-            </button>
+            {showRequesterQuickAction && (
+              <button
+                onClick={handleNewBooking}
+                className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-[#F1E6D2] transition-colors"
+                style={{
+                  background: "#891D1A",
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+              >
+                <Plus className="w-4 h-4" />
+                {quickActionText}
+              </button>
+            )}
           </div>
         </header>
 

@@ -63,6 +63,11 @@ export function StudentDashboard() {
   const [activeTab, setActiveTab] = useState<"all" | BookingStatus>("all");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [userNotifications, setUserNotifications] = useState(notifications.slice(0, 0));
+  const base = user?.role === "club" ? "/club" : "/student";
+  const isClub = user?.role === "club";
+  const dashboardTitle = isClub ? "Club Dashboard" : "Student Dashboard";
+  const bookingActionLabel = isClub ? "Event Booking" : "New Booking";
+  const emptyBookingLabel = isClub ? "Create an Event Booking" : "Book a Room";
 
   useEffect(() => {
     getMyBookings({ role: user?.role || "student", userId: user?.id, email: user?.email })
@@ -106,21 +111,21 @@ export function StudentDashboard() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">
-            Student Dashboard
+            {dashboardTitle}
           </h1>
           <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
-            Find and reserve available classrooms
+            {isClub ? "Plan events and reserve classroom spaces" : "Find and reserve available classrooms"}
           </p>
         </div>
         <button
-          onClick={() => navigate("/student/new-booking")}
+          onClick={() => navigate(`${base}/new-booking`)}
           className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-[#F1E6D2]"
           style={{ background: "#891D1A" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
           <Plus className="w-4 h-4" />
-          New Booking
+          {bookingActionLabel}
         </button>
       </div>
 
@@ -133,7 +138,7 @@ export function StudentDashboard() {
           <button
             className="text-sm font-medium flex items-center gap-1"
             style={{ color: "#891D1A" }}
-            onClick={() => navigate("/student/rooms")}
+            onClick={() => navigate(`${base}/rooms`)}
           >
             View all <ChevronRight className="w-4 h-4" />
           </button>
@@ -163,7 +168,7 @@ export function StudentDashboard() {
                   <button
                     className="text-xs font-medium"
                     style={{ color: "#891D1A" }}
-                    onClick={() => navigate("/student/new-booking", { state: { roomName: room.name } })}
+                    onClick={() => navigate(`${base}/new-booking`, { state: { roomName: room.name } })}
                   >
                     Book
                   </button>
@@ -210,7 +215,7 @@ export function StudentDashboard() {
                 <button
                   className="mt-3 text-sm font-medium"
                   style={{ color: "#891D1A" }}
-                  onClick={() => navigate("/student/new-booking")}
+                  onClick={() => navigate(`${base}/new-booking`)}
                 >
                   Book a Room →
                 </button>
