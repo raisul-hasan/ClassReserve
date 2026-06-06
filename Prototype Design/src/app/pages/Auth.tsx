@@ -47,7 +47,7 @@ export function Auth() {
 
   const handleRoleChange = (role: UserRole) => {
     setSelectedRole(role);
-    if (role === "admin" || role === "faculty") setActiveTab("login");
+    if (role === "admin") setActiveTab("login");
   };
 
   const handleLogin = async (e: FormEvent) => {
@@ -75,7 +75,7 @@ export function Auth() {
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
     setMessage("");
-    if (selectedRole === "admin" || selectedRole === "faculty") { setMessage("Faculty and admin accounts are login-only."); return; }
+    if (selectedRole === "admin") { setMessage("Admin accounts are managed by the system."); return; }
     if (!signupName.trim() || !signupEmail.trim() || !signupPassword.trim()) {
       setMessage("Please complete all fields.");
       return;
@@ -219,12 +219,12 @@ export function Auth() {
             </div>
           </div>
 
-          {(selectedRole === "admin" || selectedRole === "faculty") && (
+          {selectedRole === "admin" && (
             <div
               className="mb-4 p-3 rounded-lg text-sm"
               style={{ background: "rgba(137,29,26,0.06)", color: "#891D1A" }}
             >
-              Faculty and admin accounts are managed by the system. Self-registration is disabled.
+              Admin accounts are managed by the system. Self-registration is disabled.
             </div>
           )}
 
@@ -251,13 +251,13 @@ export function Auth() {
               Sign In
             </button>
             <button
-              onClick={() => !(selectedRole === "admin" || selectedRole === "faculty") && setActiveTab("signup")}
-              disabled={selectedRole === "admin" || selectedRole === "faculty"}
+              onClick={() => selectedRole !== "admin" && setActiveTab("signup")}
+              disabled={selectedRole === "admin"}
               className="flex-1 pb-2 text-sm font-medium transition-colors border-b-2"
               style={
                 activeTab === "signup"
                   ? { color: "#891D1A", borderColor: "#891D1A" }
-                  : selectedRole === "admin" || selectedRole === "faculty"
+                  : selectedRole === "admin"
                     ? { color: authMuted, opacity: 0.4, borderColor: "transparent" }
                     : { color: authMuted, borderColor: "transparent" }
               }
@@ -328,7 +328,7 @@ export function Auth() {
                   type="button"
                   className="font-medium hover:underline"
                   style={{ color: "#891D1A" }}
-                  onClick={() => selectedRole !== "admin" && selectedRole !== "faculty" && setActiveTab("signup")}
+                  onClick={() => selectedRole !== "admin" && setActiveTab("signup")}
                 >
                   Create one
                 </button>

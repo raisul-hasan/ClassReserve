@@ -74,8 +74,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signup = async (name: string, email: string, password: string, role: UserRole) => {
-    if (role !== 'student' && role !== 'club') {
-      throw new Error('Only student and club accounts can sign up.');
+    if (role === 'admin') {
+      throw new Error('Admin accounts are managed by the system.');
     }
 
     await signupWithApi(name, email, password, role);

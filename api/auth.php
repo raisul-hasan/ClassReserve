@@ -34,8 +34,12 @@ if ($action === 'register') {
         json_response(['error' => 'Password must be at least 6 characters.'], 400);
     }
 
-    if (!in_array($role, ['student', 'club'], true)) {
-        $role = 'student';
+    if ($role === 'admin') {
+        json_response(['error' => 'Admin accounts are managed by the system.'], 403);
+    }
+
+    if (!in_array($role, ['student', 'club', 'faculty'], true)) {
+        json_response(['error' => 'Invalid registration role.'], 400);
     }
 
     $hash = password_hash($password, PASSWORD_DEFAULT);

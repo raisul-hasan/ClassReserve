@@ -6,11 +6,12 @@ $method = $_SERVER['REQUEST_METHOD'];
 $user = require_login();
 
 if ($method === 'GET') {
-    $sql = 'SELECT b.*, u.name as user_name, u.role as user_role, r.name as room_name, r.building FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id';
+    $sql = 'SELECT b.*, u.name as user_name, u.email as user_email, u.role as user_role, r.name as room_name, r.building FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id';
     $where = [];
     $params = [];
     if (!in_array($user['role'], ['admin', 'faculty'], true)) {
-        $where[] = 'b.user_id = ?';
+        $where[] = '(b.status = ? OR b.user_id = ?)';
+        $params[] = 'approved';
         $params[] = $user['id'];
     } elseif (!empty($_GET['user_id'])) {
         $where[] = 'b.user_id = ?';

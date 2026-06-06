@@ -45,6 +45,7 @@ export function NewBooking() {
   const { user } = useAuth();
 
   const prefilledRoom = (location.state as { roomName?: string } | null)?.roomName || "";
+  const hasPrefilledRoom = Boolean(prefilledRoom);
 
   const [step, setStep] = useState(1);
   const [date, setDate] = useState("");
@@ -76,15 +77,19 @@ export function NewBooking() {
     if (step === 1) {
       if (!date || !startTime || !endTime) { setMessage("Please select date and time."); return; }
       if (startTime >= endTime) { setMessage("End time must be after start time."); return; }
-      setIsSubmitting(true);
-      try {
-        const rooms = await getAvailableRooms({ date, startTime, endTime, minimumCapacity: minCapacity });
-        setAvailableRooms(rooms.filter((room) => room.status === "available"));
-      } catch {
-        setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
-      } finally {
-        setIsSubmitting(false);
+      if (!hasPrefilledRoom) {
+        setIsSubmitting(true);
+        try {
+          const rooms = await getAvailableRooms({ date, startTime, endTime, minimumCapacity: minCapacity });
+          setAvailableRooms(rooms.filter((room) => room.status === "available"));
+        } catch {
+          setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
+        } finally {
+          setIsSubmitting(false);
+        }
       }
+      setStep(hasPrefilledRoom ? 3 : 2);
+      return;
     }
     if (step === 2) {
       if (!selectedRoom) { setMessage("Please select a room."); return; }
@@ -140,7 +145,7 @@ export function NewBooking() {
             New Booking
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "#5E657B" }}>
-            Submit a classroom reservation request
+            {hasPrefilledRoom ? `Reserve ${prefilledRoom}` : "Submit a classroom reservation request"}
           </p>
         </div>
       </div>
@@ -162,7 +167,7 @@ export function NewBooking() {
           <StepDot step={3} current={step} />
         </div>
         <div className="flex justify-between mt-2">
-          {["Find a Room", "Select Room", "Booking Details"].map((label, i) => (
+          {(hasPrefilledRoom ? ["Choose Time", "Room Selected", "Booking Details"] : ["Find a Room", "Select Room", "Booking Details"]).map((label, i) => (
             <span
               key={label}
               className="text-xs"
@@ -178,8 +183,18 @@ export function NewBooking() {
       {step === 1 && (
         <div className="bg-card rounded-xl p-6 shadow-sm space-y-5">
           <h2 style={{ ...PLAYFAIR, fontSize: 20, fontWeight: 600 }} className="text-foreground">
-            When do you need a room?
+            {hasPrefilledRoom ? `When do you need ${prefilledRoom}?` : "When do you need a room?"}
           </h2>
+
+          {hasPrefilledRoom && (
+            <div
+              className="rounded-lg p-3 text-sm"
+              style={{ background: "rgba(137,29,26,0.05)", border: "1px solid rgba(137,29,26,0.15)" }}
+            >
+              <span style={{ color: "#5E657B" }}>Selected room: </span>
+              <span className="font-semibold text-foreground">{prefilledRoom}</span>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Date</label>
@@ -411,7 +426,7 @@ export function NewBooking() {
           onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
         >
-          {isSubmitting ? (step === 1 ? "Searching..." : "Submitting...") : step === 1 ? "Search Availability" : step === 3 ? "Submit Booking Request" : "Continue"}
+          {isSubmitting ? (step === 1 ? "Searching..." : "Submitting...") : step === 1 ? (hasPrefilledRoom ? "Continue" : "Search Availability") : step === 3 ? "Submit Booking Request" : "Continue"}
           {step < 3 && <ArrowRight className="w-4 h-4" />}
         </button>
       </div>

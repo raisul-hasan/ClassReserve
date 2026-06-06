@@ -422,7 +422,7 @@ export async function loginWithApi(email: string, password: string) {
   return data.user;
 }
 
-export async function signupWithApi(name: string, email: string, password: string, role: "student" | "club") {
+export async function signupWithApi(name: string, email: string, password: string, role: Exclude<UserRole, "admin">) {
   return apiRequest<{ ok: boolean; message?: string }>("auth.php", {
     method: "POST",
     body: JSON.stringify({ action: "register", name, email, password, role }),
