@@ -20,18 +20,10 @@ type BookingRow = {
   time: string;
   status: Status;
   hasDoc: boolean;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
 };
-
-const fallbackBookings = [
-  { id: 1, eventName: "Math 101 Lecture", userRole: "Faculty" as RoleType, user: "Dr. Sarah Johnson", room: "Room A-301", building: "Building A", date: "Apr 1, 2026", time: "10:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
-  { id: 2, eventName: "Engineering Club Meeting", userRole: "Club" as RoleType, user: "Engineering Club", room: "Room B-205", building: "Building B", date: "Apr 1, 2026", time: "2:00 PM – 4:00 PM", status: "approved" as Status, hasDoc: false },
-  { id: 3, eventName: "Study Group Session", userRole: "Student" as RoleType, user: "Michael Chen", room: "Lab C-105", building: "Building C", date: "Apr 2, 2026", time: "3:00 PM – 5:00 PM", status: "pending" as Status, hasDoc: false },
-  { id: 4, eventName: "Physics Lab", userRole: "Faculty" as RoleType, user: "Prof. David Lee", room: "Lab C-106", building: "Building C", date: "Apr 2, 2026", time: "9:00 AM – 12:00 PM", status: "approved" as Status, hasDoc: true },
-  { id: 5, eventName: "Project Presentation", userRole: "Student" as RoleType, user: "Emma Wilson", room: "Room D-202", building: "Building D", date: "Apr 3, 2026", time: "1:00 PM – 2:00 PM", status: "rejected" as Status, hasDoc: false },
-  { id: 6, eventName: "Guest Lecture Series", userRole: "Faculty" as RoleType, user: "Dr. Maria Garcia", room: "Auditorium B", building: "Building B", date: "Apr 4, 2026", time: "2:00 PM – 5:00 PM", status: "approved" as Status, hasDoc: true },
-  { id: 7, eventName: "Dance Club Practice", userRole: "Club" as RoleType, user: "Dance Club", room: "Room E-101", building: "Building E", date: "Apr 5, 2026", time: "4:00 PM – 6:00 PM", status: "pending" as Status, hasDoc: false },
-  { id: 8, eventName: "Tutorial Session", userRole: "Student" as RoleType, user: "James Brown", room: "Room A-302", building: "Building A", date: "Apr 5, 2026", time: "10:00 AM – 11:00 AM", status: "cancelled" as Status, hasDoc: false },
-];
 
 function statusStyle(s: Status) {
   switch (s) {
@@ -74,6 +66,7 @@ export function Bookings() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const isFaculty = user?.role === "faculty";
@@ -98,8 +91,12 @@ export function Bookings() {
           time: `${item.startTime} - ${item.endTime}`,
           status: item.status as Status,
           hasDoc: item.hasDocument,
+          reviewedBy: item.reviewedBy,
+          reviewedAt: item.reviewedAt,
+          rejectionReason: item.rejectionReason,
         })));
       })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load bookings."))
       .finally(() => setIsLoading(false));
   }, [user?.role, user?.id, user?.email]);
 
@@ -148,6 +145,7 @@ export function Bookings() {
           style={{ borderColor: "rgba(137,29,26,0.2)" }}
         />
       </div>
+      {error && <div className="rounded-xl p-4 text-sm" style={{ background: "rgba(137,29,26,0.06)", border: "1px solid rgba(137,29,26,0.2)", color: "#891D1A" }}>{error}</div>}
 
       {/* Tab bar */}
       <div className="bg-card rounded-xl shadow-sm overflow-hidden">
@@ -284,6 +282,9 @@ export function Bookings() {
                 ["Status", statusStyle(selectedBooking.status).label],
                 ["Priority", priorityForRole(selectedBooking.userRole).label],
                 ["Document", selectedBooking.hasDoc ? "Attached" : "Not attached"],
+                ["Reviewed by", selectedBooking.reviewedBy || "Not reviewed"],
+                ["Reviewed at", selectedBooking.reviewedAt || "Not reviewed"],
+                ["Rejection reason", selectedBooking.rejectionReason || "Not applicable"],
               ].map(([label, value]) => (
                 <div key={label}>
                   <p className="text-xs font-semibold mb-0.5" style={{ color: "#5E657B" }}>{label}</p>

@@ -66,7 +66,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    require_role('admin');
+    $admin = require_role('admin');
     $input = get_json_input();
     $action = $input['action'] ?? 'create';
 
@@ -81,6 +81,7 @@ if ($method === 'POST') {
 
         $stmt = $pdo->prepare("UPDATE rooms SET status = 'disabled' WHERE id = ?");
         $stmt->execute([$id]);
+        create_audit_log($pdo, $admin['id'], 'room_updated', 'room', $id, ['status' => 'disabled']);
         json_response(['ok' => true, 'id' => $id, 'status' => 'disabled']);
     } elseif ($action === 'delete') {
         $_GET['id'] = $input['id'] ?? null;
@@ -93,12 +94,14 @@ if ($method === 'POST') {
 
         $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, floor, equipment, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
         $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['equipment'] ?: null, $room['status'], $room['notes'] ?: null]);
-        json_response(['ok' => true, 'id' => (int) $pdo->lastInsertId()], 201);
+        $roomId = (int) $pdo->lastInsertId();
+        create_audit_log($pdo, $admin['id'], 'room_created', 'room', $roomId, ['name' => $room['name'], 'status' => $room['status']]);
+        json_response(['ok' => true, 'id' => $roomId], 201);
     }
 }
 
 if ($method === 'PUT') {
-    require_role('admin');
+    $admin = require_role('admin');
     $input = $parsedInput ?? get_json_input();
     $id = (int) ($input['id'] ?? $_GET['id'] ?? 0);
     $existing = $id > 0 ? find_room($pdo, $id) : null;
@@ -111,6 +114,7 @@ if ($method === 'PUT') {
 
     $stmt = $pdo->prepare('UPDATE rooms SET name = ?, capacity = ?, type = ?, building = ?, floor = ?, equipment = ?, status = ?, notes = ? WHERE id = ?');
     $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['equipment'] ?: null, $room['status'], $room['notes'] ?: null, $id]);
+    create_audit_log($pdo, $admin['id'], 'room_updated', 'room', $id, ['name' => $room['name'], 'status' => $room['status']]);
     json_response(['ok' => true, 'id' => $id]);
 }
 

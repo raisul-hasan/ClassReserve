@@ -6,7 +6,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $user = require_login();
 
 if ($method === 'GET') {
-    $sql = 'SELECT b.*, u.name as user_name, u.email as user_email, u.role as user_role, r.name as room_name, r.building FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id';
+    $sql = 'SELECT b.*, u.name as user_name, u.email as user_email, u.role as user_role, r.name as room_name, r.building, reviewer.name as reviewer_name FROM bookings b LEFT JOIN users u ON b.user_id = u.id LEFT JOIN rooms r ON b.room_id = r.id LEFT JOIN users reviewer ON b.reviewed_by = reviewer.id';
     $where = [];
     $params = [];
     if (!in_array($user['role'], ['admin', 'faculty'], true)) {
@@ -49,7 +49,7 @@ if ($method === 'POST') {
         if (in_array($action, ['approve', 'reject'], true) && !in_array($user['role'], ['admin', 'faculty'], true)) {
             json_response(['error' => 'Only faculty or admin can approve or reject bookings.'], 403);
         }
-        $detailsStmt = $pdo->prepare('SELECT b.user_id, b.title, b.start_datetime, b.status, r.name AS room_name FROM bookings b LEFT JOIN rooms r ON b.room_id = r.id WHERE b.id = ?');
+        $detailsStmt = $pdo->prepare('SELECT b.user_id, b.room_id, b.title, b.start_datetime, b.status, r.name AS room_name FROM bookings b LEFT JOIN rooms r ON b.room_id = r.id WHERE b.id = ?');
         $detailsStmt->execute([$id]);
         $bookingDetails = $detailsStmt->fetch();
         if (!$bookingDetails) {
@@ -63,8 +63,17 @@ if ($method === 'POST') {
         }
 
         $newStatus = $action === 'approve' ? 'approved' : ($action === 'reject' ? 'rejected' : 'cancelled');
-        $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
-        $stmt->execute([$newStatus, $id]);
+        $reason = clean_string($input['reason'] ?? '');
+        if ($action === 'reject' && $reason === '') {
+            json_response(['error' => 'A rejection reason is required.'], 422);
+        }
+        if (in_array($action, ['approve', 'reject'], true)) {
+            $stmt = $pdo->prepare('UPDATE bookings SET status = ?, reviewed_by = ?, reviewed_at = NOW(), rejection_reason = ? WHERE id = ?');
+            $stmt->execute([$newStatus, $user['id'], $action === 'reject' ? $reason : null, $id]);
+        } else {
+            $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
+            $stmt->execute([$newStatus, $id]);
+        }
 
         if ($bookingDetails && in_array($action, ['approve', 'reject'], true)) {
             $title = $action === 'approve' ? 'Booking Approved' : 'Booking Rejected';
@@ -74,6 +83,13 @@ if ($method === 'POST') {
             $message = $bookingTitle . ' for ' . $roomName . ' on ' . $bookingDetails['start_datetime'] . ' has been ' . $newStatus . '.';
             create_notification($pdo, $bookingDetails['user_id'], $type, $title, $message);
         }
+
+        create_audit_log($pdo, $user['id'], 'booking_' . ($action === 'cancel' ? 'cancelled' : ($action === 'approve' ? 'approved' : 'rejected')), 'booking', $id, [
+            'title' => $bookingDetails['title'],
+            'room_id' => (int) $bookingDetails['room_id'],
+            'room_name' => $bookingDetails['room_name'],
+            'reason' => $reason ?: null,
+        ]);
 
         echo json_encode(['ok' => true]);
         exit;
@@ -115,6 +131,12 @@ if ($method === 'POST') {
         $uploaded_path
     ]);
     $bookingId = $pdo->lastInsertId();
+    create_audit_log($pdo, $user['id'], 'booking_created', 'booking', $bookingId, [
+        'title' => $input['title'] ?? null,
+        'room_id' => (int) $room_id,
+        'start_datetime' => $start,
+        'end_datetime' => $end,
+    ]);
     create_notification(
         $pdo,
         $user['id'],
@@ -137,6 +159,10 @@ if ($method === 'DELETE') {
     // cancel by id: /api/bookings.php?id=123
     $id = $_GET['id'] ?? null;
     if (!$id) { http_response_code(400); echo json_encode(['error' => 'Missing id']); exit; }
+    $detailsStmt = $pdo->prepare('SELECT id, user_id, room_id, title FROM bookings WHERE id = ?');
+    $detailsStmt->execute([$id]);
+    $bookingDetails = $detailsStmt->fetch();
+    if (!$bookingDetails) { json_response(['error' => 'Booking not found.'], 404); }
     if (in_array($user['role'], ['admin', 'faculty'], true)) {
         $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ?');
         $stmt->execute(['cancelled', $id]);
@@ -144,6 +170,11 @@ if ($method === 'DELETE') {
         $stmt = $pdo->prepare('UPDATE bookings SET status = ? WHERE id = ? AND user_id = ?');
         $stmt->execute(['cancelled', $id, $user['id']]);
     }
+    if ($stmt->rowCount() === 0) { json_response(['error' => 'You can only cancel your own bookings.'], 403); }
+    create_audit_log($pdo, $user['id'], 'booking_cancelled', 'booking', $id, [
+        'title' => $bookingDetails['title'],
+        'room_id' => (int) $bookingDetails['room_id'],
+    ]);
     echo json_encode(['ok' => true]);
     exit;
 }

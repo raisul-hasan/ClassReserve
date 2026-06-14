@@ -60,7 +60,7 @@ if ($method === 'GET') {
 }
 
 if ($method === 'POST') {
-    require_role('admin');
+    $admin = require_role('admin');
     $input = get_json_input();
     $action = $input['action'] ?? 'create';
 
@@ -78,7 +78,9 @@ if ($method === 'POST') {
 
         $stmt = $pdo->prepare('INSERT INTO maintenance (room_id, start_datetime, end_datetime, reason) VALUES (?, ?, ?, ?)');
         $stmt->execute([$data['room_id'], $data['start_datetime'], $data['end_datetime'], $data['reason'] ?: null]);
-        json_response(['ok' => true, 'id' => (int) $pdo->lastInsertId()], 201);
+        $maintenanceId = (int) $pdo->lastInsertId();
+        create_audit_log($pdo, $admin['id'], 'maintenance_created', 'maintenance', $maintenanceId, $data);
+        json_response(['ok' => true, 'id' => $maintenanceId], 201);
     }
 }
 

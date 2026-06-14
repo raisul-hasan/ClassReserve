@@ -76,6 +76,7 @@ if ($action === 'login') {
         $_SESSION['name'] = $user['name'];
         $_SESSION['email'] = $user['email'];
         $_SESSION['is_active'] = (bool) $user['is_active'];
+        create_audit_log($pdo, $user['id'], 'login', 'user', $user['id'], ['email' => $user['email'], 'role' => $user['role']]);
         json_response([
             'ok' => true,
             'message' => 'Login successful.',

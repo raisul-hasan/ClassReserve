@@ -126,7 +126,7 @@ if ($action === 'upvote') {
 }
 
 if ($action === 'status') {
-    require_role('admin');
+    $admin = require_role('admin');
     $issueId = (int) ($input['issue_id'] ?? 0);
     $status = clean_string($input['status'] ?? '');
     $adminResponse = clean_string($input['admin_response'] ?? '');
@@ -147,11 +147,17 @@ if ($action === 'status') {
         create_notification($pdo, $issue['user_id'], $type, 'Issue Status Updated', '"' . $issue['title'] . '" is now ' . $status . '.');
     }
 
+    create_audit_log($pdo, $admin['id'], 'issue_status_updated', 'issue', $issueId, [
+        'status' => $status,
+        'admin_response' => $adminResponse ?: null,
+        'reason' => $rejectionReason ?: null,
+    ]);
+
     json_response(['ok' => true]);
 }
 
 if ($action === 'maintenance_from_issue') {
-    require_role('admin');
+    $admin = require_role('admin');
     $issueId = (int) ($input['issue_id'] ?? 0);
     $start = clean_string($input['start_datetime'] ?? '');
     $end = clean_string($input['end_datetime'] ?? '');
@@ -186,6 +192,13 @@ if ($action === 'maintenance_from_issue') {
     $stmt = $pdo->prepare('INSERT INTO maintenance (room_id, start_datetime, end_datetime, reason) VALUES (?, ?, ?, ?)');
     $stmt->execute([$roomId, $start, $end, $reason ?: $issue['description']]);
     $maintenanceId = (int) $pdo->lastInsertId();
+    create_audit_log($pdo, $admin['id'], 'maintenance_created', 'maintenance', $maintenanceId, [
+        'issue_id' => $issueId,
+        'room_id' => $roomId,
+        'start_datetime' => $start,
+        'end_datetime' => $end,
+        'reason' => $reason ?: $issue['description'],
+    ]);
 
     $stmt = $pdo->prepare('UPDATE issues SET status = ?, updated_at = NOW() WHERE id = ?');
     $stmt->execute(['In Progress', $issueId]);

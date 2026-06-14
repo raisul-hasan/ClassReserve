@@ -41,6 +41,32 @@ export interface Booking {
   description?: string;
   conflictStatus?: "clear" | "conflict" | "maintenance";
   rejectionReason?: string;
+  reviewedById?: number;
+  reviewedBy?: string;
+  reviewedAt?: string;
+}
+
+export interface DashboardStats {
+  rooms: { total: number; available: number; booked: number; maintenance: number };
+  bookings: { total: number; pending: number; approved: number; rejected: number; cancelled: number };
+  issues_by_status: { status: string; count: number }[];
+  most_used_rooms: { room_id: number; room_name: string; booking_count: number }[];
+  bookings_by_role: { role: UserRole; count: number }[];
+  recent_activity: { id: number; action: string; target_type?: string; target_id?: number; details?: string; created_at: string; user_name?: string }[];
+  viewer_role: "admin" | "faculty";
+}
+
+export interface AuditLog {
+  id: number;
+  userId?: number;
+  userName?: string;
+  userEmail?: string;
+  userRole?: UserRole;
+  action: string;
+  targetType?: string;
+  targetId?: number;
+  details?: string;
+  createdAt: string;
 }
 
 export interface MaintenanceBlock {

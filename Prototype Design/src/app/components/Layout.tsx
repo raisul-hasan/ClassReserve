@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Flag,
   Wrench,
+  History,
 } from "lucide-react";
 import { Input } from "./ui/input";
 import { useTheme } from "../context/ThemeContext";
@@ -29,6 +30,7 @@ const adminNavigation = [
   { name: "Manage Rooms", href: "/admin/rooms", icon: DoorOpen },
   { name: "Maintenance", href: "/admin/maintenance", icon: Wrench },
   { name: "Issue Reports", href: "/admin/issue-reports", icon: Flag },
+  { name: "Audit Logs", href: "/admin/audit-logs", icon: History },
   { name: "Calendar", href: "/admin/calendar", icon: CalendarDays },
   { name: "Notifications", href: "/admin/notifications", icon: Bell },
   { name: "Settings", href: "/admin/settings", icon: Settings },

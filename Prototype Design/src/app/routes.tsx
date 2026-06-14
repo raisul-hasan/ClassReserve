@@ -18,6 +18,7 @@ import { BookingConfirmation } from "./pages/BookingConfirmation";
 import { Forum } from "./pages/Forum";
 import { IssueReports } from "./pages/IssueReports";
 import { Maintenance } from "./pages/Maintenance";
+import { AuditLogs } from "./pages/AuditLogs";
 
 function RoleLayout({ role }: { role: UserRole }) {
   const { user, isLoading } = useAuth();
@@ -111,6 +112,7 @@ export const router = createBrowserRouter([
       { path: "new-booking", element: <Navigate to="/admin/approvals" replace /> },
       { path: "booking-confirmation", element: <Navigate to="/admin/approvals" replace /> },
       { path: "issue-reports", Component: IssueReports },
+      { path: "audit-logs", Component: AuditLogs },
     ],
   },
 ]);

@@ -7,14 +7,6 @@ import { createBooking, getAvailableRooms } from "../services/classReserveServic
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
-const roomOptions = [
-  { name: "Room A-301", capacity: 30, building: "Building A", type: "Lecture", status: "available", equipment: ["Projector", "Whiteboard", "Wi-Fi"] },
-  { name: "Lab C-105", capacity: 25, building: "Building C", type: "Lab", status: "available", equipment: ["Computers", "Wi-Fi", "Projector"] },
-  { name: "Auditorium B", capacity: 200, building: "Building B", type: "Auditorium", status: "available", equipment: ["Audio System", "Projector", "Stage"] },
-  { name: "Room E-101", capacity: 20, building: "Building E", type: "Seminar", status: "available", equipment: ["TV Display", "Wi-Fi"] },
-  { name: "Room B-205", capacity: 45, building: "Building B", type: "Lecture", status: "available", equipment: ["Projector", "Whiteboard", "Wi-Fi", "Computer"] },
-];
-
 function StepDot({ step, current }: { step: number; current: number }) {
   const active = step === current;
   const done = step < current;
@@ -44,7 +36,7 @@ export function NewBooking() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const routeState = location.state as { roomName?: string; selectedDate?: string } | null;
+  const routeState = location.state as { roomName?: string; roomId?: number; selectedDate?: string; startAtStep?: number } | null;
   const queryDate = new URLSearchParams(location.search).get("date") || "";
   const prefilledRoom = routeState?.roomName || "";
   const prefilledDate = routeState?.selectedDate || queryDate;
@@ -62,10 +54,12 @@ export function NewBooking() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [availableRooms, setAvailableRooms] = useState(roomOptions);
+  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
 
   useEffect(() => {
-    setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
+    getAvailableRooms({ minimumCapacity: minCapacity })
+      .then((rooms) => setAvailableRooms(rooms.filter((room) => room.status === "available")))
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Could not load rooms from the API."));
   }, [minCapacity]);
 
   useEffect(() => {
@@ -89,8 +83,9 @@ export function NewBooking() {
         try {
           const rooms = await getAvailableRooms({ date, startTime, endTime, minimumCapacity: minCapacity });
           setAvailableRooms(rooms.filter((room) => room.status === "available"));
-        } catch {
-          setAvailableRooms(roomOptions.filter((r) => r.status === "available" && r.capacity >= minCapacity));
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Could not load rooms from the API.");
+          return;
         } finally {
           setIsSubmitting(false);
         }
@@ -107,6 +102,7 @@ export function NewBooking() {
       try {
         await createBooking({
           title: eventName,
+          roomId: routeState?.roomId,
           roomName: selectedRoom,
           date,
           startTime,

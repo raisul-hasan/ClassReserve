@@ -207,3 +207,19 @@ function create_role_notification($pdo, $roles, $type, $title, $message)
         create_notification($pdo, $row['id'], $type, $title, $message);
     }
 }
+
+function create_audit_log($pdo, $userId, $action, $targetType = null, $targetId = null, $details = null)
+{
+    if (is_array($details) || is_object($details)) {
+        $details = json_encode($details, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO audit_logs (user_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)');
+    $stmt->execute([
+        $userId ? (int) $userId : null,
+        clean_string($action),
+        $targetType ? clean_string($targetType) : null,
+        $targetId ? (int) $targetId : null,
+        $details !== null ? (string) $details : null,
+    ]);
+}

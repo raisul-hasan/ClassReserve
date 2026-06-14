@@ -8,17 +8,6 @@ import { Room } from "../types/classReserve";
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
 const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
-const fallbackRooms = [
-  { id: 1, name: "Room A-301", capacity: 30, status: "available", equipment: ["Projector", "Whiteboard", "Wi-Fi"], building: "Building A", type: "Lecture" },
-  { id: 2, name: "Room A-302", capacity: 40, status: "booked", equipment: ["Projector", "Computer", "Wi-Fi"], building: "Building A", type: "Lecture" },
-  { id: 3, name: "Lab C-105", capacity: 25, status: "available", equipment: ["Computers", "Wi-Fi", "Projector"], building: "Building C", type: "Lab" },
-  { id: 4, name: "Auditorium B", capacity: 200, status: "available", equipment: ["Audio System", "Projector", "Stage"], building: "Building B", type: "Auditorium" },
-  { id: 5, name: "Room D-202", capacity: 35, status: "maintenance", equipment: ["Whiteboard", "Wi-Fi"], building: "Building D", type: "Lecture" },
-  { id: 6, name: "Room E-101", capacity: 20, status: "available", equipment: ["TV Display", "Wi-Fi"], building: "Building E", type: "Seminar" },
-  { id: 7, name: "Lab C-106", capacity: 30, status: "booked", equipment: ["Computers", "Wi-Fi", "Printer"], building: "Building C", type: "Lab" },
-  { id: 8, name: "Room B-205", capacity: 45, status: "available", equipment: ["Projector", "Whiteboard", "Wi-Fi", "Computer"], building: "Building B", type: "Lecture" },
-];
-
 function statusStyle(status: string) {
   switch (status) {
     case "available": return { bg: "#3B6E4A", label: "Available", border: "#3B6E4A" };
@@ -41,7 +30,7 @@ export function Rooms() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
-  const [rooms, setRooms] = useState<Room[]>(fallbackRooms as Room[]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [roomModalOpen, setRoomModalOpen] = useState(false);
   const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
@@ -63,6 +52,7 @@ export function Rooms() {
   useEffect(() => {
     getAvailableRooms()
       .then(setRooms)
+      .catch((reason) => setMessage(reason instanceof Error ? reason.message : "Could not load rooms from the API."))
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -93,7 +83,8 @@ export function Rooms() {
 
   const handleBook = (roomName: string) => {
     if (isAdmin) return;
-    navigate(`${base}/new-booking`, { state: { roomName } });
+    const room = rooms.find((item) => item.name === roomName);
+    navigate(`${base}/new-booking`, { state: { roomName, roomId: room?.id, startAtStep: 2 } });
   };
 
   const handleViewDetail = (roomName: string) => {
@@ -118,6 +109,7 @@ export function Rooms() {
     setIsLoading(true);
     getAvailableRooms()
       .then(setRooms)
+      .catch((reason) => setMessage(reason instanceof Error ? reason.message : "Could not load rooms from the API."))
       .finally(() => setIsLoading(false));
   };
 

@@ -16,6 +16,7 @@ DROP TABLE IF EXISTS `issue_comments`;
 DROP TABLE IF EXISTS `issues`;
 DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `maintenance`;
+DROP TABLE IF EXISTS `audit_logs`;
 DROP TABLE IF EXISTS `bookings`;
 DROP TABLE IF EXISTS `rooms`;
 DROP TABLE IF EXISTS `users`;
@@ -31,6 +32,21 @@ CREATE TABLE `users` (
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `audit_logs` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `user_id` INT DEFAULT NULL,
+  `action` VARCHAR(100) NOT NULL,
+  `target_type` VARCHAR(100) DEFAULT NULL,
+  `target_id` INT DEFAULT NULL,
+  `details` TEXT DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `audit_logs_user_id_idx` (`user_id`),
+  KEY `audit_logs_action_idx` (`action`),
+  KEY `audit_logs_created_at_idx` (`created_at`),
+  CONSTRAINT `audit_logs_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `rooms` (
@@ -57,12 +73,17 @@ CREATE TABLE `bookings` (
   `title` VARCHAR(255) DEFAULT NULL,
   `description` TEXT DEFAULT NULL,
   `uploaded_path` VARCHAR(255) DEFAULT NULL,
+  `reviewed_by` INT DEFAULT NULL,
+  `reviewed_at` DATETIME DEFAULT NULL,
+  `rejection_reason` TEXT DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `bookings_user_id_idx` (`user_id`),
   KEY `bookings_room_id_idx` (`room_id`),
+  KEY `bookings_reviewed_by_idx` (`reviewed_by`),
   CONSTRAINT `bookings_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `bookings_room_fk` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
+  ,CONSTRAINT `bookings_reviewer_fk` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `maintenance` (
@@ -162,18 +183,18 @@ INSERT INTO `rooms` (`id`, `name`, `capacity`, `type`, `building`, `floor`, `equ
 (11, 'Conference Room B', 20, 'Conference', 'East Hall', NULL, NULL, 'available', 'Small meeting room with video conferencing support.'),
 (12, 'Lab 202', 30, 'Computer Lab', 'Tech Center', NULL, NULL, 'available', 'Computer lab with 30 workstations.');
 
-INSERT INTO `bookings` (`id`, `user_id`, `room_id`, `start_datetime`, `end_datetime`, `status`, `priority`, `title`, `description`, `uploaded_path`, `created_at`) VALUES
-(1, 2, 8, '2026-06-05 10:00:00', '2026-06-05 12:00:00', 'approved', 3, 'Faculty Extra Class', 'Extra class for pending lecture material.', NULL, '2026-06-04 14:00:00'),
-(2, 6, 3, '2026-06-08 14:00:00', '2026-06-08 16:00:00', 'approved', 2, 'Programming Club Workshop', 'Hands-on workshop for club members.', NULL, '2026-06-04 14:05:00'),
-(3, 7, 10, '2026-06-12 11:00:00', '2026-06-12 13:00:00', 'pending', 1, 'Student Study Session', 'Group study session before exams.', NULL, '2026-06-04 14:10:00'),
-(4, 6, 4, '2026-06-20 15:00:00', '2026-06-20 18:00:00', 'approved', 2, 'Debate Club Event', 'Inter-department debate club event.', NULL, '2026-06-04 14:15:00'),
-(5, 3, 2, '2026-06-24 08:00:00', '2026-06-24 10:00:00', 'approved', 3, 'Makeup Class CSE-221', 'Makeup class for CSE-221.', NULL, '2026-06-04 14:20:00'),
-(6, 8, 1, '2026-06-06 09:00:00', '2026-06-06 10:00:00', 'approved', 1, 'Calculus Study Circle', 'Peer-led study circle before the weekly quiz.', NULL, '2026-06-05 09:45:00'),
-(7, 9, 6, '2026-06-13 15:00:00', '2026-06-13 17:00:00', 'pending', 1, 'Database Project Meeting', 'Team meeting for the database course project.', NULL, '2026-06-05 10:05:00'),
-(8, 10, 11, '2026-06-18 10:00:00', '2026-06-18 11:00:00', 'approved', 1, 'Thesis Group Consultation', 'Small group consultation with project teammates.', NULL, '2026-06-05 10:20:00'),
-(9, 11, 12, '2026-06-22 13:00:00', '2026-06-22 15:00:00', 'cancelled', 1, 'AI Lab Practice', 'Practice slot cancelled by requester.', NULL, '2026-06-05 10:35:00'),
-(10, 8, 2, '2026-06-26 14:00:00', '2026-06-26 16:00:00', 'rejected', 1, 'Presentation Rehearsal', 'Rejected because the requested slot was reserved for a makeup class.', NULL, '2026-06-05 10:50:00'),
-(11, 8, 9, '2026-02-12 07:36:00', '2026-02-12 19:35:00', 'pending', 1, 'club workshop', '', 'uploads/booking_0df48ff0423de63225e524c3c754b3e7.jpeg', '2026-06-06 01:38:14');
+INSERT INTO `bookings` (`id`, `user_id`, `room_id`, `start_datetime`, `end_datetime`, `status`, `priority`, `title`, `description`, `uploaded_path`, `reviewed_by`, `reviewed_at`, `rejection_reason`, `created_at`) VALUES
+(1, 2, 8, '2026-06-05 10:00:00', '2026-06-05 12:00:00', 'approved', 3, 'Faculty Extra Class', 'Extra class for pending lecture material.', NULL, 1, '2026-06-04 15:00:00', NULL, '2026-06-04 14:00:00'),
+(2, 6, 3, '2026-06-08 14:00:00', '2026-06-08 16:00:00', 'approved', 2, 'Programming Club Workshop', 'Hands-on workshop for club members.', NULL, 1, '2026-06-04 15:05:00', NULL, '2026-06-04 14:05:00'),
+(3, 7, 10, '2026-06-12 11:00:00', '2026-06-12 13:00:00', 'pending', 1, 'Student Study Session', 'Group study session before exams.', NULL, NULL, NULL, NULL, '2026-06-04 14:10:00'),
+(4, 6, 4, '2026-06-20 15:00:00', '2026-06-20 18:00:00', 'approved', 2, 'Debate Club Event', 'Inter-department debate club event.', NULL, 1, '2026-06-04 15:15:00', NULL, '2026-06-04 14:15:00'),
+(5, 3, 2, '2026-06-24 08:00:00', '2026-06-24 10:00:00', 'approved', 3, 'Makeup Class CSE-221', 'Makeup class for CSE-221.', NULL, 1, '2026-06-04 15:20:00', NULL, '2026-06-04 14:20:00'),
+(6, 8, 1, '2026-06-06 09:00:00', '2026-06-06 10:00:00', 'approved', 1, 'Calculus Study Circle', 'Peer-led study circle before the weekly quiz.', NULL, 1, '2026-06-05 10:00:00', NULL, '2026-06-05 09:45:00'),
+(7, 9, 6, '2026-06-13 15:00:00', '2026-06-13 17:00:00', 'pending', 1, 'Database Project Meeting', 'Team meeting for the database course project.', NULL, NULL, NULL, NULL, '2026-06-05 10:05:00'),
+(8, 10, 11, '2026-06-18 10:00:00', '2026-06-18 11:00:00', 'approved', 1, 'Thesis Group Consultation', 'Small group consultation with project teammates.', NULL, 5, '2026-06-05 10:30:00', NULL, '2026-06-05 10:20:00'),
+(9, 11, 12, '2026-06-22 13:00:00', '2026-06-22 15:00:00', 'cancelled', 1, 'AI Lab Practice', 'Practice slot cancelled by requester.', NULL, NULL, NULL, NULL, '2026-06-05 10:35:00'),
+(10, 8, 2, '2026-06-26 14:00:00', '2026-06-26 16:00:00', 'rejected', 1, 'Presentation Rehearsal', 'Rejected because the requested slot was reserved for a makeup class.', NULL, 1, '2026-06-05 11:00:00', 'The requested slot is reserved for a makeup class.', '2026-06-05 10:50:00'),
+(11, 8, 9, '2026-02-12 07:36:00', '2026-02-12 19:35:00', 'pending', 1, 'club workshop', '', 'uploads/booking_0df48ff0423de63225e524c3c754b3e7.jpeg', NULL, NULL, NULL, '2026-06-06 01:38:14');
 
 INSERT INTO `maintenance` (`id`, `room_id`, `start_datetime`, `end_datetime`, `reason`, `created_at`) VALUES
 (1, 5, '2026-06-10 09:00:00', '2026-06-10 12:00:00', 'HVAC inspection and maintenance.', '2026-06-04 14:25:00'),
@@ -216,6 +237,7 @@ INSERT INTO `notifications` (`id`, `user_id`, `type`, `title`, `message`, `is_re
 (14, 11, 'info', 'New Issue Comment', 'Ayesha Khan commented on "Auditorium speakers crackling".', 0, '2026-06-06 01:39:33');
 
 ALTER TABLE `users` AUTO_INCREMENT = 12;
+ALTER TABLE `audit_logs` AUTO_INCREMENT = 1;
 ALTER TABLE `rooms` AUTO_INCREMENT = 13;
 ALTER TABLE `bookings` AUTO_INCREMENT = 12;
 ALTER TABLE `maintenance` AUTO_INCREMENT = 3;
