@@ -53,8 +53,8 @@ if ($action === 'change_password') {
     if ($currentPassword === '' || $newPassword === '') {
         json_response(['error' => 'Current password and new password are required.'], 422);
     }
-    if (strlen($newPassword) < 6) {
-        json_response(['error' => 'New password must be at least 6 characters.'], 422);
+    if (!is_strong_password($newPassword)) {
+        json_response(['error' => 'New password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one number, and one special character.'], 422);
     }
 
     $stmt = $pdo->prepare('SELECT password_hash FROM users WHERE id = ?');

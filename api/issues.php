@@ -145,6 +145,22 @@ if ($action === 'status') {
     if ($issue) {
         $type = $status === 'Resolved' ? 'success' : ($status === 'Rejected' ? 'error' : 'info');
         create_notification($pdo, $issue['user_id'], $type, 'Issue Status Updated', '"' . $issue['title'] . '" is now ' . $status . '.');
+
+        // Send email notification to the reporter
+        $userStmt = $pdo->prepare('SELECT name, email FROM users WHERE id = ?');
+        $userStmt->execute([$issue['user_id']]);
+        $reporterUser = $userStmt->fetch();
+        if ($reporterUser) {
+            $issueSubject = "ClassReserve: Issue Report Update - " . htmlspecialchars($status);
+            $issueMessage = "<p>Hello " . htmlspecialchars($reporterUser['name']) . ",</p>"
+                          . "<p>The status of your issue report \"<strong>" . htmlspecialchars($issue['title']) . "</strong>\" has been updated.</p>"
+                          . "<p><strong>New Status:</strong> " . htmlspecialchars($status) . "<br>"
+                          . ($adminResponse ? "<strong>Admin Response:</strong> " . htmlspecialchars($adminResponse) . "<br>" : "")
+                          . ($rejectionReason ? "<strong>Reason/Details:</strong> " . htmlspecialchars($rejectionReason) . "<br>" : "")
+                          . "</p>"
+                          . "<p>Thank you,<br>ClassReserve Support</p>";
+            send_email($reporterUser['email'], $issueSubject, $issueMessage);
+        }
     }
 
     create_audit_log($pdo, $admin['id'], 'issue_status_updated', 'issue', $issueId, [

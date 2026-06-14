@@ -34,26 +34,64 @@ function validate_room_input($room, $allowedStatuses)
 }
 
 if ($method === 'GET') {
-    $sql = 'SELECT * FROM rooms';
+    $sql = 'SELECT r.*, (
+        SELECT GROUP_CONCAT(e.name ORDER BY e.name SEPARATOR ", ")
+        FROM room_equipment re
+        JOIN equipment e ON re.equipment_id = e.id
+        WHERE re.room_id = r.id
+    ) AS equipment FROM rooms r';
+    
     $where = [];
     $params = [];
 
     if (!empty($_GET['id'])) {
-        $where[] = 'id = ?';
+        $where[] = 'r.id = ?';
         $params[] = (int) $_GET['id'];
     }
-    if (isset($_GET['capacity_min'])) { $where[] = 'capacity >= ?'; $params[] = (int) $_GET['capacity_min']; }
-    if (isset($_GET['capacity_max'])) { $where[] = 'capacity <= ?'; $params[] = (int) $_GET['capacity_max']; }
-    if (!empty($_GET['type'])) { $where[] = 'type = ?'; $params[] = $_GET['type']; }
-    if (!empty($_GET['building'])) { $where[] = 'building = ?'; $params[] = $_GET['building']; }
-    if (!empty($_GET['status'])) { $where[] = 'status = ?'; $params[] = $_GET['status']; }
-    if (!empty($_GET['equipment'])) { $where[] = 'equipment LIKE ?'; $params[] = '%' . $_GET['equipment'] . '%'; }
-    if (!empty($_GET['q'])) { $where[] = 'name LIKE ?'; $params[] = '%' . $_GET['q'] . '%'; }
+    if (isset($_GET['capacity_min'])) { 
+        $where[] = 'r.capacity >= ?'; 
+        $params[] = (int) $_GET['capacity_min']; 
+    }
+    if (isset($_GET['capacity_max'])) { 
+        $where[] = 'r.capacity <= ?'; 
+        $params[] = (int) $_GET['capacity_max']; 
+    }
+    if (!empty($_GET['type'])) { 
+        $where[] = 'r.type = ?'; 
+        $params[] = $_GET['type']; 
+    }
+    if (!empty($_GET['building'])) { 
+        $where[] = 'r.building = ?'; 
+        $params[] = $_GET['building']; 
+    }
+    if (!empty($_GET['status'])) { 
+        $where[] = 'r.status = ?'; 
+        $params[] = $_GET['status']; 
+    }
+    if (!empty($_GET['equipment'])) { 
+        $where[] = 'r.id IN (
+            SELECT re.room_id 
+            FROM room_equipment re 
+            JOIN equipment e ON re.equipment_id = e.id 
+            WHERE e.name = ?
+        )'; 
+        $params[] = $_GET['equipment']; 
+    }
+    if (!empty($_GET['q'])) { 
+        $where[] = '(r.name LIKE ? OR r.building LIKE ? OR EXISTS (
+            SELECT 1 FROM room_equipment re 
+            JOIN equipment e ON re.equipment_id = e.id 
+            WHERE re.room_id = r.id AND e.name LIKE ?
+        ))'; 
+        $params[] = '%' . $_GET['q'] . '%'; 
+        $params[] = '%' . $_GET['q'] . '%'; 
+        $params[] = '%' . $_GET['q'] . '%'; 
+    }
 
     if ($where) {
         $sql .= ' WHERE ' . implode(' AND ', $where);
     }
-    $sql .= ' ORDER BY name';
+    $sql .= ' ORDER BY r.name';
 
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -92,9 +130,30 @@ if ($method === 'POST') {
         $room = room_input($input);
         validate_room_input($room, $allowedStatuses);
 
-        $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, floor, equipment, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['equipment'] ?: null, $room['status'], $room['notes'] ?: null]);
+        $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, floor, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['status'], $room['notes'] ?: null]);
         $roomId = (int) $pdo->lastInsertId();
+
+        // Save equipment relationally
+        $eqInput = clean_string($input['equipment'] ?? '');
+        $eqList = explode(',', $eqInput);
+        
+        $insEq = $pdo->prepare("INSERT IGNORE INTO equipment (name) VALUES (?)");
+        $getEqId = $pdo->prepare("SELECT id FROM equipment WHERE name = ?");
+        $insRoomEq = $pdo->prepare("INSERT IGNORE INTO room_equipment (room_id, equipment_id) VALUES (?, ?)");
+        
+        foreach ($eqList as $eqName) {
+            $eqName = trim($eqName);
+            if ($eqName === '') continue;
+            
+            $insEq->execute([$eqName]);
+            $getEqId->execute([$eqName]);
+            $eqId = $getEqId->fetchColumn();
+            if ($eqId) {
+                $insRoomEq->execute([$roomId, $eqId]);
+            }
+        }
+
         create_audit_log($pdo, $admin['id'], 'room_created', 'room', $roomId, ['name' => $room['name'], 'status' => $room['status']]);
         json_response(['ok' => true, 'id' => $roomId], 201);
     }
@@ -112,8 +171,32 @@ if ($method === 'PUT') {
     $room = room_input($input, $existing);
     validate_room_input($room, $allowedStatuses);
 
-    $stmt = $pdo->prepare('UPDATE rooms SET name = ?, capacity = ?, type = ?, building = ?, floor = ?, equipment = ?, status = ?, notes = ? WHERE id = ?');
-    $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['equipment'] ?: null, $room['status'], $room['notes'] ?: null, $id]);
+    $stmt = $pdo->prepare('UPDATE rooms SET name = ?, capacity = ?, type = ?, building = ?, floor = ?, status = ?, notes = ? WHERE id = ?');
+    $stmt->execute([$room['name'], $room['capacity'], $room['type'], $room['building'], $room['floor'] ?: null, $room['status'], $room['notes'] ?: null, $id]);
+
+    // Save equipment relationally
+    $delRoomEq = $pdo->prepare("DELETE FROM room_equipment WHERE room_id = ?");
+    $delRoomEq->execute([$id]);
+
+    $eqInput = clean_string($input['equipment'] ?? '');
+    $eqList = explode(',', $eqInput);
+    
+    $insEq = $pdo->prepare("INSERT IGNORE INTO equipment (name) VALUES (?)");
+    $getEqId = $pdo->prepare("SELECT id FROM equipment WHERE name = ?");
+    $insRoomEq = $pdo->prepare("INSERT IGNORE INTO room_equipment (room_id, equipment_id) VALUES (?, ?)");
+    
+    foreach ($eqList as $eqName) {
+        $eqName = trim($eqName);
+        if ($eqName === '') continue;
+        
+        $insEq->execute([$eqName]);
+        $getEqId->execute([$eqName]);
+        $eqId = $getEqId->fetchColumn();
+        if ($eqId) {
+            $insRoomEq->execute([$id, $eqId]);
+        }
+    }
+
     create_audit_log($pdo, $admin['id'], 'room_updated', 'room', $id, ['name' => $room['name'], 'status' => $room['status']]);
     json_response(['ok' => true, 'id' => $id]);
 }

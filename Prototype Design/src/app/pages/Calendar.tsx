@@ -342,49 +342,71 @@ export function Calendar() {
                 No events scheduled for this day.
               </div>
             ) : (
-              selectedEvents.map((event) => {
-                const mine = isOwnEvent(event);
-                const c = eventChipColor(event, mine);
-                const sl = statusLabel(event.status);
-                return (
-                  <button
-                    key={event.id}
-                    onClick={(e) => handleEventClick(event, e)}
-                    className="w-full text-left rounded-xl p-4 border hover:bg-[#891D1A]/5 transition-colors"
-                    style={{
-                      borderColor: mine ? "#14B8A6" : "rgba(137,29,26,0.15)",
-                      boxShadow: mine ? "0 0 0 1px rgba(20,184,166,0.35)" : undefined,
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>{event.title}</p>
-                        <p className="text-xs mt-1" style={{ color: "#5E657B" }}>{timeLabel(event)} - {event.roomName}</p>
-                        {event.building && <p className="text-xs mt-1" style={{ color: "#5E657B" }}>{event.building}</p>}
-                        <p className="text-xs mt-1" style={{ color: "#5E657B" }}>
-                          Booked by {event.requesterName} - {event.requesterRole}
-                        </p>
-                      </div>
-                      <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: c.border }}>
-                        {eventTypeLabel(event.eventType)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: sl.color }}>
-                        {sl.label}
-                      </span>
-                      <span className="text-xs font-semibold capitalize" style={{ color: c.border }}>
-                        Priority: {event.priority}
-                      </span>
-                      {event.conflictStatus !== "no_conflict" && (
-                        <span className="text-xs font-semibold" style={{ color: "#B8860B" }}>
-                          {conflictLabel(event.conflictStatus)}
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
+              Object.entries(
+                selectedEvents.reduce((acc, event) => {
+                  const roomKey = `${event.roomName}${event.building ? ` (${event.building})` : ''}`;
+                  if (!acc[roomKey]) acc[roomKey] = [];
+                  acc[roomKey].push(event);
+                  return acc;
+                }, {} as Record<string, CalendarEvent[]>)
+              ).map(([roomGroup, roomEvents]) => (
+                <div key={roomGroup} className="space-y-2 border-l-2 pl-4 py-1" style={{ borderColor: "rgba(137,29,26,0.15)" }}>
+                  <h4 style={{ ...PLAYFAIR, fontSize: 13, fontWeight: 600 }} className="text-foreground/80 mt-3 mb-1">
+                    🏢 {roomGroup}
+                  </h4>
+                  <div className="space-y-2">
+                    {roomEvents.map((event) => {
+                      const mine = isOwnEvent(event);
+                      const c = eventChipColor(event, mine);
+                      const sl = statusLabel(event.status);
+                      return (
+                        <button
+                          key={event.id}
+                          onClick={(e) => handleEventClick(event, e)}
+                          className="w-full text-left rounded-xl p-4 border hover:bg-[#891D1A]/5 transition-colors"
+                          style={{
+                            borderColor: mine ? "#14B8A6" : "rgba(137,29,26,0.15)",
+                            boxShadow: mine ? "0 0 0 1px rgba(20,184,166,0.35)" : undefined,
+                          }}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-foreground" style={PLAYFAIR}>{event.title}</p>
+                              <p className="text-xs mt-1" style={{ color: "#5E657B" }}>{timeLabel(event)}</p>
+                              <p className="text-xs mt-1" style={{ color: "#5E657B" }}>
+                                Booked by {event.requesterName} - {event.requesterRole}
+                              </p>
+                            </div>
+                            <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: c.border }}>
+                              {eventTypeLabel(event.eventType)}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-3 flex-wrap">
+                            <span className="text-xs px-2 py-0.5 rounded-full text-white" style={{ background: sl.color }}>
+                              {sl.label}
+                            </span>
+                            <span className="text-xs font-semibold capitalize" style={{ color: c.border }}>
+                              Priority: {event.priority}
+                            </span>
+                            {event.conflictStatus !== "no_conflict" && (
+                              <span
+                                className="text-[10px] px-2 py-0.5 rounded font-semibold border flex items-center gap-0.5"
+                                style={{
+                                  background: event.conflictStatus === "conflict_detected" ? "#FDE8E8" : "#FEF3C7",
+                                  color: event.conflictStatus === "conflict_detected" ? "#9B1C1C" : "#D97706",
+                                  borderColor: event.conflictStatus === "conflict_detected" ? "#F8B4B4" : "#FCD34D"
+                                }}
+                              >
+                                ⚠️ {conflictLabel(event.conflictStatus)}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
             )}
           </div>
         )}
@@ -641,7 +663,20 @@ export function Calendar() {
                   </div>
                   <div>
                     <p className="text-xs mb-1" style={{ color: "#5E657B" }}>Conflict Status</p>
-                    <p className="text-sm text-foreground">{conflictLabel(selectedEvent.conflictStatus)}</p>
+                    {selectedEvent.conflictStatus !== "no_conflict" ? (
+                      <span
+                        className="text-xs px-2.5 py-1 rounded font-semibold border inline-flex items-center gap-0.5"
+                        style={{
+                          background: selectedEvent.conflictStatus === "conflict_detected" ? "#FDE8E8" : "#FEF3C7",
+                          color: selectedEvent.conflictStatus === "conflict_detected" ? "#9B1C1C" : "#D97706",
+                          borderColor: selectedEvent.conflictStatus === "conflict_detected" ? "#F8B4B4" : "#FCD34D"
+                        }}
+                      >
+                        ⚠️ {conflictLabel(selectedEvent.conflictStatus)}
+                      </span>
+                    ) : (
+                      <p className="text-sm text-foreground">No conflict</p>
+                    )}
                   </div>
                   {selectedEvent.maintenanceWarning && (
                     <div>

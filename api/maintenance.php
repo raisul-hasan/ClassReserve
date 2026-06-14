@@ -80,6 +80,21 @@ if ($method === 'POST') {
         $stmt->execute([$data['room_id'], $data['start_datetime'], $data['end_datetime'], $data['reason'] ?: null]);
         $maintenanceId = (int) $pdo->lastInsertId();
         create_audit_log($pdo, $admin['id'], 'maintenance_created', 'maintenance', $maintenanceId, $data);
+
+        // Notify active admin and faculty users of new maintenance block
+        $mRoom = find_room($pdo, $data['room_id']);
+        $stmtAlert = $pdo->prepare("SELECT email, name FROM users WHERE role IN ('admin', 'faculty') AND is_active = 1");
+        $stmtAlert->execute();
+        foreach ($stmtAlert->fetchAll() as $alertUser) {
+            $mSubject = "ClassReserve: Maintenance Block Scheduled";
+            $mMessage = "<p>Hello " . htmlspecialchars($alertUser['name']) . ",</p>"
+                     . "<p>A maintenance block has been scheduled for <strong>" . htmlspecialchars($mRoom['name'] ?? 'Room') . "</strong>.</p>"
+                     . "<p><strong>Time:</strong> " . htmlspecialchars($data['start_datetime']) . " to " . htmlspecialchars($data['end_datetime']) . "<br>"
+                     . "<strong>Reason:</strong> " . htmlspecialchars($data['reason']) . "</p>"
+                     . "<p>Thank you,<br>ClassReserve Team</p>";
+            send_email($alertUser['email'], $mSubject, $mMessage);
+        }
+
         json_response(['ok' => true, 'id' => $maintenanceId], 201);
     }
 }

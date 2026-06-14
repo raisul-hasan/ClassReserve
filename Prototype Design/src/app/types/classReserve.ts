@@ -44,6 +44,9 @@ export interface Booking {
   reviewedById?: number;
   reviewedBy?: string;
   reviewedAt?: string;
+  checkinCode?: string;
+  checkedInAt?: string;
+  noShow?: boolean;
 }
 
 export interface DashboardStats {

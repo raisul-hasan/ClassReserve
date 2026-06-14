@@ -81,27 +81,47 @@ Faculty, club, and student demo accounts use `ClassReserve123!`.
 
 Admin accounts are system-managed. Student, club, and faculty users can register from the frontend.
 
-## Database
+## Database & Migrations
 
-Use only `db/classreserve.sql` for a fresh install. It creates the database, tables, relationships, demo accounts, rooms, bookings, maintenance blocks, issues, comments, notifications, booking review fields, and audit logs.
+Use `db/classreserve.sql` for a fresh installation. The database features a fully relational model.
 
-Important tables added or upgraded:
+### Schema & Relational Tables
+- **Rooms & Equipment**: Transitioned from comma-separated text lists to a fully relational structure (`equipment` and `room_equipment` tables). The backend dynamically joins and processes this relationally while keeping full interface compatibility.
+- **Check-ins**: `bookings` contains `checkin_code`, `checked_in_at`, and `no_show` to track check-in status and automate no-show expiries.
+- **Brute-Force Rate Limiting**: The `failed_logins` table stores login failures per IP and email to enforce rate-limiting.
+- **Approvals & Audit**: `bookings.reviewed_by`, `bookings.reviewed_at`, and `bookings.rejection_reason` track approvals, and the `audit_logs` table logs all major events.
 
-- `bookings.reviewed_by`, `bookings.reviewed_at`, and `bookings.rejection_reason` track approval/rejection decisions.
-- `audit_logs` records login, booking creation, approval, rejection, cancellation, room creation/update, maintenance creation, and issue status updates.
+> [!NOTE]
+> **Self-Healing Migrations**: When any API endpoint loads, `api/db.php` checks the database schema and automatically creates any missing tables/columns and migrates existing room equipment data. You do not need to re-import the database if upgrading from an older version!
 
-Re-importing `classreserve.sql` recreates the database from scratch, so export any local data first if you need to keep it.
+## Advanced Upgrades Implemented
 
-## Current Behavior
+### 1. Calendar Conflict Visualization
+- **Overlap Validation**: Bookings are checked in SQL against other approved bookings and active maintenance blocks for the same room on the same day/time.
+- **Room-Wise Daily Schedule**: The calendar's Day view groups events dynamically by room (e.g. `Room A-301`) for clear scheduling.
+- **Visual Alert Badges**: Renders soft red `⚠️ Conflict detected` and soft yellow `⚠️ Maintenance conflict` badges for conflicting items.
+- **Status Distinction**: Unique styling distinguishes Student, Club, Faculty, and Maintenance bookings.
 
-- Students and clubs see approved bookings plus their own pending/rejected/cancelled bookings.
-- Faculty and admin can review the booking queue.
-- Approvals and rejections store reviewer name, review time, and rejection reason when applicable.
-- Admin dashboard stats are loaded from `api/dashboard.php`.
-- Faculty dashboard uses real room, booking, approval, and analytics data.
-- Admin audit logs are available at `/admin/audit-logs`.
-- Pending and approved bookings are checked for booking and maintenance conflicts.
-- Notifications are created for booking decisions and issue updates.
+### 2. QR Code Check-in & No-Show Expiry
+- **Check-in Codes**: Generation of a secure check-in code (`CR-XXXXXX`) upon booking approval.
+- **QR Code Rendering**: Embeds a dynamic QR code in the booking details panel using `api.qrserver.com`.
+- **Manual & QR Check-in**: A "Check In Now" action lets booking owners check in directly.
+- **15-Min No-Show Sweep**: Automatically sweeps the database on request, flagging approved bookings that are unchecked 15 minutes past their start time as `✗ Marked as No-Show` and freeing the room.
+
+### 3. Pure-PHP Socket SMTP Mailer
+- **Dependency-Free SMTP Client**: Built directly in `api/mail.php` using TCP/IP sockets (`fsockopen`), avoiding heavy external mailer packages.
+- **Notifications on Action**: Dispatches email alerts when a booking is created, approved, rejected, maintenance is scheduled, or issue statuses are updated.
+- **Robust Failures**: Gracefully logs failures and falls back without breaking client API requests if SMTP is disabled or unreachable.
+
+### 4. Advanced Security Features
+- **Brute-force protection**: Limits failed logins to 5 attempts per 15 minutes, blocking further tries with a `429 Too Many Requests` code.
+- **Strong password verification**: Validates that all passwords at registration and profile update contain uppercase, lowercase, numbers, and special characters.
+- **Double-Submit Cookie CSRF Protection**: Generates a CSRF cookie on load and enforces header validation (`X-CSRF-Token`) for all writing endpoints (POST, PUT, DELETE).
+- **File Upload Scan**: Scan text file uploads to verify no PHP (`<?php`) or JavaScript (`<script`) tags exist in the file.
+- **Global Exception Safety**: Suppresses PHP stack traces on server exceptions, returning a clean 500 JSON response and logging errors to PHP's error log.
+
+## Testing & Verification
+Refer to [TESTING.md](file:///i:/GitHub/ClassReserve/docs/TESTING.md) for a comprehensive list of step-by-step verification procedures for each of these features.
 
 ## Validation
 

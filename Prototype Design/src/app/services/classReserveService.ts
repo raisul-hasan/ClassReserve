@@ -77,6 +77,9 @@ function toBooking(row: any): Booking {
     description: row.description || "", conflictStatus: row.conflict_status || "clear",
     rejectionReason: row.rejection_reason || undefined, reviewedById: row.reviewed_by ? Number(row.reviewed_by) : undefined,
     reviewedBy: row.reviewer_name || undefined, reviewedAt: row.reviewed_at || undefined,
+    checkinCode: row.checkin_code || undefined,
+    checkedInAt: row.checked_in_at || undefined,
+    noShow: Boolean(row.no_show),
   };
 }
 
@@ -226,6 +229,9 @@ export async function rejectBooking(id: number, reason: string) {
 }
 export async function cancelBooking(id: number) {
   return apiRequest<{ ok: boolean }>("bookings.php", { method: "POST", body: JSON.stringify({ id, action: "cancel" }) });
+}
+export async function checkinBooking(code: string) {
+  return apiRequest<{ ok: boolean; message?: string }>("bookings.php", { method: "POST", body: JSON.stringify({ action: "checkin", checkin_code: code }) });
 }
 
 export async function getMaintenanceBlocks() { return (await apiRequest<any[]>("maintenance.php")).map(toMaintenance); }

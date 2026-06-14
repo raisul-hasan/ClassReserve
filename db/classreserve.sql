@@ -56,10 +56,24 @@ CREATE TABLE `rooms` (
   `type` VARCHAR(100) DEFAULT NULL,
   `building` VARCHAR(100) DEFAULT NULL,
   `floor` VARCHAR(50) DEFAULT NULL,
-  `equipment` TEXT DEFAULT NULL,
   `status` ENUM('available','booked','maintenance','disabled') NOT NULL DEFAULT 'available',
   `notes` TEXT DEFAULT NULL,
   PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `equipment` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `name` VARCHAR(255) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `name` (`name`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `room_equipment` (
+  `room_id` INT NOT NULL,
+  `equipment_id` INT NOT NULL,
+  PRIMARY KEY (`room_id`, `equipment_id`),
+  CONSTRAINT `room_equipment_room_fk` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `room_equipment_equipment_fk` FOREIGN KEY (`equipment_id`) REFERENCES `equipment` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `bookings` (
@@ -76,14 +90,18 @@ CREATE TABLE `bookings` (
   `reviewed_by` INT DEFAULT NULL,
   `reviewed_at` DATETIME DEFAULT NULL,
   `rejection_reason` TEXT DEFAULT NULL,
+  `checkin_code` VARCHAR(50) DEFAULT NULL,
+  `checked_in_at` DATETIME DEFAULT NULL,
+  `no_show` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
+  UNIQUE KEY `checkin_code_idx` (`checkin_code`),
   KEY `bookings_user_id_idx` (`user_id`),
   KEY `bookings_room_id_idx` (`room_id`),
   KEY `bookings_reviewed_by_idx` (`reviewed_by`),
   CONSTRAINT `bookings_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `bookings_room_fk` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
-  ,CONSTRAINT `bookings_reviewer_fk` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `bookings_room_fk` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `bookings_reviewer_fk` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `maintenance` (
@@ -96,6 +114,13 @@ CREATE TABLE `maintenance` (
   PRIMARY KEY (`id`),
   KEY `maintenance_room_id_idx` (`room_id`),
   CONSTRAINT `maintenance_room_fk` FOREIGN KEY (`room_id`) REFERENCES `rooms` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE `failed_logins` (
+  `ip_address` VARCHAR(45) NOT NULL,
+  `email` VARCHAR(255) NOT NULL,
+  `attempted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY `failed_logins_ip_email_idx` (`ip_address`, `email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 CREATE TABLE `notifications` (
@@ -169,19 +194,43 @@ INSERT INTO `users` (`id`, `name`, `email`, `password_hash`, `role`, `is_active`
 (10, 'Nadia Islam', 'nadia.islam@uni.edu', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'student', 1, '2026-06-05 09:24:00'),
 (11, 'Tanvir Ahmed', 'tanvir.ahmed@uni.edu', '$2y$10$Oln95RkA3WZEh0rfEjRscuvVGOAUiRoLitINzz9lOhUGtj.ndIgbO', 'student', 1, '2026-06-05 09:30:00');
 
-INSERT INTO `rooms` (`id`, `name`, `capacity`, `type`, `building`, `floor`, `equipment`, `status`, `notes`) VALUES
-(1, 'Room A-301', 30, 'Lecture', 'Building A', '3rd Floor', 'Projector, Whiteboard, Wi-Fi', 'available', 'Standard lecture room'),
-(2, 'Room A-302', 40, 'Lecture', 'Building A', '3rd Floor', 'Projector, Computer, Wi-Fi', 'available', 'Lecture room with instructor computer'),
-(3, 'Lab C-105', 25, 'Lab', 'Building C', '1st Floor', 'Computers, Wi-Fi, Projector', 'available', 'Computer lab'),
-(4, 'Auditorium B', 200, 'Auditorium', 'Building B', 'Ground Floor', 'Audio System, Projector, Stage', 'available', 'Large event space'),
-(5, 'Room D-202', 35, 'Lecture', 'Building D', '2nd Floor', 'Whiteboard, Wi-Fi', 'maintenance', 'HVAC maintenance scheduled'),
-(6, 'Room E-101', 20, 'Seminar', 'Building E', '1st Floor', 'TV Display, Wi-Fi', 'available', 'Small seminar room'),
-(7, 'Lab C-106', 30, 'Lab', 'Building C', '1st Floor', 'Computers, Wi-Fi, Printer', 'available', 'Computer lab with printer'),
-(8, 'Room B-205', 45, 'Lecture', 'Building B', '2nd Floor', 'Projector, Whiteboard, Wi-Fi, Computer', 'available', 'Medium lecture room'),
-(9, 'Auditorium A', 120, 'Auditorium', 'Main Building', NULL, NULL, 'available', 'Large room with projector and stage.'),
-(10, 'Classroom 101', 40, 'Classroom', 'North Wing', NULL, NULL, 'available', 'Standard classroom with whiteboard.'),
-(11, 'Conference Room B', 20, 'Conference', 'East Hall', NULL, NULL, 'available', 'Small meeting room with video conferencing support.'),
-(12, 'Lab 202', 30, 'Computer Lab', 'Tech Center', NULL, NULL, 'available', 'Computer lab with 30 workstations.');
+INSERT INTO `rooms` (`id`, `name`, `capacity`, `type`, `building`, `floor`, `status`, `notes`) VALUES
+(1, 'Room A-301', 30, 'Lecture', 'Building A', '3rd Floor', 'available', 'Standard lecture room'),
+(2, 'Room A-302', 40, 'Lecture', 'Building A', '3rd Floor', 'available', 'Lecture room with instructor computer'),
+(3, 'Lab C-105', 25, 'Lab', 'Building C', '1st Floor', 'available', 'Computer lab'),
+(4, 'Auditorium B', 200, 'Auditorium', 'Building B', 'Ground Floor', 'available', 'Large event space'),
+(5, 'Room D-202', 35, 'Lecture', 'Building D', '2nd Floor', 'maintenance', 'HVAC maintenance scheduled'),
+(6, 'Room E-101', 20, 'Seminar', 'Building E', '1st Floor', 'available', 'Small seminar room'),
+(7, 'Lab C-106', 30, 'Lab', 'Building C', '1st Floor', 'available', 'Computer lab with printer'),
+(8, 'Room B-205', 45, 'Lecture', 'Building B', '2nd Floor', 'available', 'Medium lecture room'),
+(9, 'Auditorium A', 120, 'Auditorium', 'Main Building', NULL, 'available', 'Large room with projector and stage.'),
+(10, 'Classroom 101', 40, 'Classroom', 'North Wing', NULL, 'available', 'Standard classroom with whiteboard.'),
+(11, 'Conference Room B', 20, 'Conference', 'East Hall', NULL, 'available', 'Small meeting room with video conferencing support.'),
+(12, 'Lab 202', 30, 'Computer Lab', 'Tech Center', NULL, 'available', 'Computer lab with 30 workstations.');
+
+INSERT INTO `equipment` (`id`, `name`) VALUES
+(1, 'Projector'),
+(2, 'Whiteboard'),
+(3, 'Wi-Fi'),
+(4, 'AC'),
+(5, 'Computer'),
+(6, 'Sound system'),
+(7, 'Smart board'),
+(8, 'Lab computers'),
+(9, 'Audio System'),
+(10, 'Stage'),
+(11, 'TV Display'),
+(12, 'Printer');
+
+INSERT INTO `room_equipment` (`room_id`, `equipment_id`) VALUES
+(1, 1), (1, 2), (1, 3),
+(2, 1), (2, 5), (2, 3),
+(3, 5), (3, 3), (3, 1),
+(4, 9), (4, 1), (4, 10),
+(5, 2), (5, 3),
+(6, 11), (6, 3),
+(7, 5), (7, 3), (7, 12),
+(8, 1), (8, 2), (8, 3), (8, 5);
 
 INSERT INTO `bookings` (`id`, `user_id`, `room_id`, `start_datetime`, `end_datetime`, `status`, `priority`, `title`, `description`, `uploaded_path`, `reviewed_by`, `reviewed_at`, `rejection_reason`, `created_at`) VALUES
 (1, 2, 8, '2026-06-05 10:00:00', '2026-06-05 12:00:00', 'approved', 3, 'Faculty Extra Class', 'Extra class for pending lecture material.', NULL, 1, '2026-06-04 15:00:00', NULL, '2026-06-04 14:00:00'),

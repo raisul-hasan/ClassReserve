@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import { Clock, BookOpen, Shield, FileText, X } from "lucide-react";
-import { cancelBooking as cancelBookingRequest, getMyBookings } from "../services/classReserveService";
+import { cancelBooking as cancelBookingRequest, getMyBookings, checkinBooking } from "../services/classReserveService";
 import { useAuth } from "../context/AuthContext";
 
 const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
@@ -23,6 +23,9 @@ type BookingRow = {
   reviewedBy?: string;
   reviewedAt?: string;
   rejectionReason?: string;
+  checkinCode?: string;
+  checkedInAt?: string;
+  noShow?: boolean;
 };
 
 function statusStyle(s: Status) {
@@ -94,6 +97,9 @@ export function Bookings() {
           reviewedBy: item.reviewedBy,
           reviewedAt: item.reviewedAt,
           rejectionReason: item.rejectionReason,
+          checkinCode: item.checkinCode,
+          checkedInAt: item.checkedInAt,
+          noShow: item.noShow,
         })));
       })
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load bookings."))
@@ -291,6 +297,46 @@ export function Bookings() {
                   <p className="text-sm text-foreground">{value}</p>
                 </div>
               ))}
+              {selectedBooking.status === "approved" && (
+                <div className="mt-4 p-4 rounded-xl border bg-emerald-500/5 border-emerald-500/20 text-center space-y-3">
+                  <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">APPROVED CHECK-IN</p>
+                  {selectedBooking.checkedInAt ? (
+                    <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                      ✓ Checked in at {selectedBooking.checkedInAt}
+                    </p>
+                  ) : selectedBooking.noShow ? (
+                    <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">
+                      ✗ Marked as No-Show (expired)
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-foreground mb-1">Use this code or scan the QR below to check in:</p>
+                      <p className="text-lg font-bold tracking-wider text-foreground select-all">{selectedBooking.checkinCode}</p>
+                      <div className="flex justify-center my-2">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${selectedBooking.checkinCode}`}
+                          alt="Check-in QR Code"
+                          className="w-32 h-32 border border-border rounded p-1 bg-white"
+                        />
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await checkinBooking(selectedBooking.checkinCode!);
+                            alert("Check-in successful!");
+                            window.location.reload();
+                          } catch (err: any) {
+                            alert(err.message || "Check-in failed");
+                          }
+                        }}
+                        className="w-full py-2 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700"
+                      >
+                        Check In Now
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
               {selectedBooking.status === "pending" && (
                 <button onClick={() => cancelBooking(selectedBooking.id)} className="w-full py-2.5 rounded-lg text-sm font-medium text-white" style={{ background: "#891D1A" }}>
                   Cancel Request

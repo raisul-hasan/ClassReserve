@@ -1,8 +1,31 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/mail.php';
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
+}
+
+// Global exception handler
+set_exception_handler(function ($exception) {
+    error_log($exception->getMessage() . "\n" . $exception->getTraceAsString());
+    http_response_code(500);
+    echo json_encode(['error' => 'An unexpected server error occurred. Please try again later.']);
+    exit;
+});
+
+// Generate CSRF token and set cookie
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if (!headers_sent() && (!isset($_COOKIE['csrf_token']) || $_COOKIE['csrf_token'] !== $_SESSION['csrf_token'])) {
+    setcookie('csrf_token', $_SESSION['csrf_token'], [
+        'expires' => 0,
+        'path' => '/',
+        'secure' => false,
+        'httponly' => false,
+        'samesite' => 'Lax'
+    ]);
 }
 
 function json_response($data, $status = 200)
@@ -42,6 +65,15 @@ function require_login()
         json_response(['error' => 'Please log in first.'], 401);
     }
 
+    // Verify CSRF for modifying methods
+    $method = $_SERVER['REQUEST_METHOD'];
+    if (in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+        $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+        if (empty($_SESSION['csrf_token']) || !$token || $token !== $_SESSION['csrf_token']) {
+            json_response(['error' => 'CSRF verification failed.'], 403);
+        }
+    }
+
     $stmt = $pdo->prepare('SELECT is_active FROM users WHERE id = ?');
     $stmt->execute([$user['id']]);
     $row = $stmt->fetch();
@@ -67,6 +99,26 @@ function require_role($roles)
 function clean_string($value)
 {
     return trim((string) ($value ?? ''));
+}
+
+function is_strong_password($password)
+{
+    if (strlen($password) < 8) {
+        return false;
+    }
+    if (!preg_match('/[A-Z]/', $password)) {
+        return false;
+    }
+    if (!preg_match('/[a-z]/', $password)) {
+        return false;
+    }
+    if (!preg_match('/[0-9]/', $password)) {
+        return false;
+    }
+    if (!preg_match('/[^a-zA-Z0-9]/', $password)) {
+        return false;
+    }
+    return true;
 }
 
 function valid_datetime($value)
@@ -138,6 +190,12 @@ function save_uploaded_attachment($fieldName = 'attachment', $prefix = 'att_')
     }
     if ($file['size'] > 5 * 1024 * 1024) {
         json_response(['error' => 'Attachment must be 5 MB or smaller.'], 413);
+    }
+
+    // Scan content for PHP/Script tags to prevent remote code execution
+    $tmpContent = file_get_contents($file['tmp_name']);
+    if (preg_match('/<\?php/i', $tmpContent) || preg_match('/<script/i', $tmpContent)) {
+        json_response(['error' => 'Uploaded file contains invalid or unsafe content.'], 415);
     }
 
     $allowedExtensions = [
