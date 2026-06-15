@@ -15,13 +15,14 @@ The app is now database-driven. Rooms, bookings, calendar events, maintenance bl
 
 ## Project Structure
 
-| Path                  | Purpose                                    |
-| --------------------- | ------------------------------------------ |
-| `Prototype Design/`   | Main React/Vite frontend                   |
-| `api/`                | PHP API endpoints                          |
-| `db/classreserve.sql` | Complete fresh database install and seed   |
-| `public/uploads/`     | Uploaded booking/issue attachments         |
-| `config.php.example`  | Example backend database config            |
+| Path                        | Purpose                                           |
+| --------------------------- | ------------------------------------------------- |
+| `Prototype Design/`         | Main React/Vite frontend                          |
+| `public/`                   | PHP-based frontend pages and shared CSS/JS        |
+| `api/`                      | PHP API endpoints                                 |
+| `db/classreserve.sql`       | Complete fresh database install and seed          |
+| `public/uploads/`           | Uploaded booking/issue attachments                |
+| `config.php.example`        | Example backend database config                   |
 
 ## Quick Setup
 
@@ -29,7 +30,8 @@ The app is now database-driven. Rooms, bookings, calendar events, maintenance bl
 2. Copy `config.php.example` to `config.php`.
 3. Keep the default config if XAMPP MySQL uses `root` with no password.
 4. Import `db/classreserve.sql` in phpMyAdmin.
-5. Start the frontend:
+
+### Option 1: Run the React/Vite frontend
 
 ```powershell
 cd "Prototype Design"
@@ -40,6 +42,27 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5174
 Open `http://127.0.0.1:5174`.
 
 The default API base is `http://localhost/classreserve/api`. Override it in `Prototype Design/.env.local` with `VITE_API_BASE_URL` if your Apache path is different.
+
+### Option 2: Run the new PHP HTML/CSS frontend
+
+Place the repository root inside your Apache web directory (for example, `C:\xampp\htdocs\classreserve`).
+
+Open `http://localhost/classreserve/public/`.
+
+This app uses the same backend API under `http://localhost/classreserve/api/`.
+
+### Optional: Import seed data
+
+`db/classreserve.sql` already includes a full set of demo data (users, rooms, equipment links, bookings, maintenance, issues, notifications). To import the canonical seed data use:
+
+```powershell
+# From the repository root (Windows):
+mysql -u root -p classreserve < db/classreserve.sql
+
+# Or import `db/classreserve.sql` using phpMyAdmin (choose the `classreserve` database).
+```
+
+If you previously downloaded `db/sample_data.sql`, it is redundant — the canonical seed is `db/classreserve.sql`. Adjust `user_id` values only if your local user rows differ.
 
 ## API Endpoints
 
