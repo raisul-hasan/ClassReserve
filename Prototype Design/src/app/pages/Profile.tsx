@@ -1,162 +1,481 @@
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { User, Mail, Phone, Building2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Mail, Building2, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import type { User } from "../context/AuthContext";
+import { changePassword, updateProfile } from "../services/classReserveService";
+
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+type ProfileExtras = {
+  department: string;
+  profileId: string;
+  phone: string;
+  recentActivity: string[];
+};
+
+function getInitials(name: string) {
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+}
+
+function getRoleLabel(role?: string) {
+  if (role === "admin") return "Administrator";
+  if (role === "faculty") return "Faculty";
+  if (role === "club") return "Club";
+  return "Student";
+}
+
+function splitName(name?: string) {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+function getProfileStorageKey(user: User | null) {
+  return `classreserve.profile.${user?.id || user?.email || "guest"}`;
+}
+
+function loadProfileExtras(user: User | null): ProfileExtras {
+  const defaults: ProfileExtras = { department: "", profileId: "", phone: "", recentActivity: [] };
+  if (!user) return defaults;
+
+  try {
+    const saved = localStorage.getItem(getProfileStorageKey(user));
+    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
+function saveProfileExtras(user: User, extras: ProfileExtras) {
+  localStorage.setItem(getProfileStorageKey(user), JSON.stringify(extras));
+}
+
+function getDepartmentLabel(role?: string) {
+  if (role === "club") return "Club Category / Department";
+  if (role === "admin") return "Office / Department";
+  return "Department";
+}
+
+function getIdLabel(role?: string) {
+  if (role === "faculty") return "Faculty ID";
+  if (role === "club") return "Club ID";
+  if (role === "admin") return "Staff ID";
+  return "Student ID";
+}
+
+function isValidPhone(phone: string) {
+  return !phone || /^[+()\-\s\d]{7,20}$/.test(phone);
+}
 
 export function Profile() {
+  const { user, updateUser } = useAuth();
+  const initialName = splitName(user?.name);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [firstName, setFirstName] = useState(initialName.firstName);
+  const [lastName, setLastName] = useState(initialName.lastName);
+  const [email, setEmail] = useState(user?.email || "");
+  const [department, setDepartment] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [recentActivity, setRecentActivity] = useState<string[]>([]);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const applyProfileForm = (profileUser: User | null) => {
+    const name = splitName(profileUser?.name);
+    const extras = loadProfileExtras(profileUser);
+    setFirstName(name.firstName);
+    setLastName(name.lastName);
+    setEmail(profileUser?.email || "");
+    setDepartment(extras.department);
+    setProfileId(extras.profileId);
+    setPhone(extras.phone);
+    setRecentActivity(extras.recentActivity || []);
+  };
+
+  const resetProfileForm = () => {
+    applyProfileForm(user);
+    setMessage("");
+  };
+
+  useEffect(() => {
+    if (user) {
+      applyProfileForm(user);
+    }
+  }, [user?.id, user?.email]);
+
+  const inputCls =
+    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
+
+  const handleSaveProfile = async () => {
+    const cleanFirstName = firstName.trim();
+    const cleanLastName = lastName.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanFirstName) {
+      setMessage("First name is required.");
+      return;
+    }
+
+    if (!cleanLastName) {
+      setMessage("Last name is required.");
+      return;
+    }
+
+    if (!isValidPhone(cleanPhone)) {
+      setMessage("Phone number can only include numbers, spaces, +, -, and parentheses.");
+      return;
+    }
+
+    const fullName = `${cleanFirstName} ${cleanLastName}`.trim();
+    const activity = [`Profile updated ${new Date().toLocaleDateString()}`, ...recentActivity].slice(0, 5);
+    const extras: ProfileExtras = {
+      department: department.trim(),
+      profileId: profileId.trim(),
+      phone: cleanPhone,
+      recentActivity: activity,
+    };
+
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await updateProfile(fullName);
+      if (!user) {
+        setMessage("Could not save profile.");
+        return;
+      }
+
+      const nextUser = { ...user, name: fullName };
+      updateUser(nextUser);
+      saveProfileExtras(nextUser, extras);
+      setRecentActivity(activity);
+      setMessage("Profile saved.");
+      setIsEditing(false);
+    } catch (error) {
+      if (!user) {
+        setMessage(error instanceof Error ? error.message : "Could not save profile.");
+        return;
+      }
+
+      const nextUser = { ...user, name: fullName };
+      updateUser(nextUser);
+      saveProfileExtras(nextUser, extras);
+      setRecentActivity(activity);
+      setMessage("Profile saved locally.");
+      setIsEditing(false);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setMessage("Please fill all password fields.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage("New password and confirmation do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setMessage("New password must be at least 6 characters.");
+      return;
+    }
+
+    setIsSaving(true);
+    setMessage("");
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPwOpen(false);
+      setMessage("Password updated.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update password.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Profile</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Manage your account information
-        </p>
+    <div className="space-y-0 max-w-2xl" style={DM_SANS}>
+      <div
+        className="rounded-t-2xl p-8 flex flex-col items-center gap-3"
+        style={{
+          background: "linear-gradient(135deg, #210706 0%, #3d0e0b 50%, #210706 100%)",
+        }}
+      >
+        <div
+          className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white"
+          style={{ background: "#891D1A", boxShadow: "0 0 0 4px rgba(137,29,26,0.3)" }}
+        >
+          {getInitials(user?.name || "U")}
+        </div>
+        <div className="text-center">
+          <h2 className="text-xl text-white" style={{ ...PLAYFAIR, fontWeight: 600 }}>
+            {user?.name || "User"}
+          </h2>
+          <span
+            className="inline-block text-xs px-3 py-1 rounded-full mt-1 font-medium"
+            style={{ background: "#5E657B", color: "#F1E6D2" }}
+          >
+            {getRoleLabel(user?.role)}
+          </span>
+        </div>
       </div>
 
-      {/* Profile Header */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-6">
-            <div className="w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center">
-              <User className="w-10 h-10 text-white" />
+      <div className="bg-card rounded-b-2xl shadow-sm overflow-hidden">
+        {message && (
+          <div
+            className="mx-6 mt-5 rounded-lg px-4 py-3 text-sm font-medium"
+            style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+          >
+            {message}
+          </div>
+        )}
+
+        <div className="px-6 pt-6 pb-5 border-b border-border">
+          <div className="flex items-center justify-between gap-3">
+            <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
+              Personal Information
+            </h3>
+            {!isEditing && (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium border"
+                style={{ borderColor: "rgba(137,29,26,0.3)", color: "#891D1A" }}
+              >
+                Edit Profile
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                First Name
+              </label>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                readOnly={!isEditing}
+                required
+                className={inputCls}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
+              />
             </div>
-            <div className="flex-1">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Admin User</h2>
-              <p className="text-gray-500 dark:text-gray-400">System Administrator</p>
-              <Button variant="outline" className="mt-3 rounded-xl dark:border-gray-700 dark:text-gray-300">
-                Change Photo
-              </Button>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                Last Name
+              </label>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                readOnly={!isEditing}
+                required
+                className={inputCls}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Personal Information */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardHeader>
-          <CardTitle className="dark:text-white">Personal Information</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="firstName" className="dark:text-gray-300">First Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  defaultValue="Admin"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName" className="dark:text-gray-300">Last Name</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  id="lastName"
-                  placeholder="Doe"
-                  className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  defaultValue="User"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="email" className="dark:text-gray-300">Email Address</Label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Email Address
+            </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="email"
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
+              <input
                 type="email"
-                placeholder="admin@university.edu"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="admin@university.edu"
+                value={email}
+                readOnly
+                className={`${inputCls} pl-9`}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: 0.75 }}
               />
             </div>
+            <p className="text-xs" style={{ color: "#5E657B" }}>
+              Email and role are managed by the system.
+            </p>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="phone" className="dark:text-gray-300">Phone Number</Label>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              {getDepartmentLabel(user?.role)}
+            </label>
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="+1 (555) 123-4567"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="+1 (555) 123-4567"
+              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#5E657B" }} />
+              <input
+                type="text"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                readOnly={!isEditing}
+                className={`${inputCls} pl-9`}
+                style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="department" className="dark:text-gray-300">Department</Label>
-            <div className="relative">
-              <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <Input
-                id="department"
-                placeholder="Administration"
-                className="pl-9 rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                defaultValue="Administration"
-              />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              {getIdLabel(user?.role)}
+            </label>
+            <input
+              type="text"
+              value={profileId}
+              onChange={(e) => setProfileId(e.target.value)}
+              readOnly={!isEditing}
+              className={inputCls}
+              style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Phone Number
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              readOnly={!isEditing}
+              placeholder="+880 1XXX XXXXXX"
+              className={inputCls}
+              style={{ borderColor: "rgba(137,29,26,0.2)", opacity: isEditing ? 1 : 0.75 }}
+            />
+          </div>
+
+          {isEditing && (
+            <div className="flex gap-3">
+              <button
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium border"
+                style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
+                onClick={() => {
+                  resetProfileForm();
+                  setIsEditing(false);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium text-white flex items-center justify-center gap-2 transition-colors"
+                style={{ background: "#891D1A" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+                onClick={handleSaveProfile}
+                disabled={isSaving}
+              >
+                <Save className="w-4 h-4" />
+                {isSaving ? "Saving..." : "Save Changes"}
+              </button>
             </div>
-          </div>
+          )}
+        </div>
 
-          <div className="pt-4">
-            <Button className="bg-blue-600 hover:bg-blue-700 rounded-xl">
-              Save Changes
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="border-t border-border">
+          <button
+            onClick={() => setPwOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-6 py-4 hover:bg-[#891D1A]/5 transition-colors"
+          >
+            <span className="text-sm font-semibold" style={{ color: "#891D1A" }}>
+              Change Password
+            </span>
+            {pwOpen ? (
+              <ChevronUp className="w-4 h-4" style={{ color: "#891D1A" }} />
+            ) : (
+              <ChevronDown className="w-4 h-4" style={{ color: "#891D1A" }} />
+            )}
+          </button>
 
-      {/* Security Settings */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardHeader>
-          <CardTitle className="dark:text-white">Security</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current-password" className="dark:text-gray-300">Current Password</Label>
-            <Input
-              id="current-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
+          {pwOpen && (
+            <div className="px-6 pb-5 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  placeholder="Current password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  New Password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+                  Confirm New Password
+                </label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className={inputCls}
+                  style={{ borderColor: "rgba(137,29,26,0.2)" }}
+                />
+              </div>
+              <button
+                className="w-full py-2.5 rounded-lg text-sm font-medium border transition-colors"
+                style={{ borderColor: "#891D1A", color: "#891D1A" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(137,29,26,0.06)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                }}
+                onClick={handleChangePassword}
+                disabled={isSaving}
+              >
+                {isSaving ? "Updating..." : "Update Password"}
+              </button>
+            </div>
+          )}
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="new-password" className="dark:text-gray-300">New Password</Label>
-            <Input
-              id="new-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="confirm-password" className="dark:text-gray-300">Confirm New Password</Label>
-            <Input
-              id="confirm-password"
-              type="password"
-              placeholder="••••••••"
-              className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-            />
-          </div>
-
-          <div className="pt-4">
-            <Button variant="outline" className="rounded-xl dark:border-gray-700 dark:text-gray-300">
-              Update Password
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="border-t border-border px-6 py-5">
+          <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground mb-3">
+            Recent Activity
+          </h3>
+          {recentActivity.length > 0 ? (
+            <div className="space-y-2">
+              {recentActivity.map((activity) => (
+                <p key={activity} className="text-sm" style={{ color: "#5E657B" }}>
+                  {activity}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: "#5E657B" }}>
+              No recent activity yet.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

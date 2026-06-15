@@ -1,292 +1,437 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Label } from "../components/ui/label";
-import { Textarea } from "../components/ui/textarea";
-import { Badge } from "../components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import { CalendarDays, Clock3, DoorOpen, Users, ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Users, Upload } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { createBooking, getAvailableRooms } from "../services/classReserveService";
 
-const roomOptions = [
-  { name: "Room A-301", capacity: 30, building: "Building A", status: "available" },
-  { name: "Room A-302", capacity: 40, building: "Building A", status: "booked" },
-  { name: "Lab C-105", capacity: 25, building: "Building C", status: "available" },
-  { name: "Auditorium B", capacity: 200, building: "Building B", status: "available" },
-  { name: "Room D-202", capacity: 35, building: "Building D", status: "maintenance" },
-  { name: "Room E-101", capacity: 20, building: "Building E", status: "available" },
-  { name: "Lab C-106", capacity: 30, building: "Building C", status: "booked" },
-  { name: "Room B-205", capacity: 45, building: "Building B", status: "available" },
-];
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+function StepDot({ step, current }: { step: number; current: number }) {
+  const active = step === current;
+  const done = step < current;
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all"
+        style={{
+          background: done ? "#3B6E4A" : active ? "#891D1A" : "rgba(94,101,123,0.15)",
+          color: done || active ? "#fff" : "#5E657B",
+        }}
+      >
+        {done ? <Check className="w-4 h-4" /> : step}
+      </div>
+      {step < 3 && (
+        <div
+          className="flex-1 h-0.5 min-w-[48px]"
+          style={{ background: step < current ? "#3B6E4A" : "rgba(94,101,123,0.2)" }}
+        />
+      )}
+    </div>
+  );
+}
 
 export function NewBooking() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
-  const prefilledRoom = (location.state as { roomName?: string } | null)?.roomName || "";
+  const routeState = location.state as { roomName?: string; roomId?: number; selectedDate?: string; startAtStep?: number } | null;
+  const queryDate = new URLSearchParams(location.search).get("date") || "";
+  const prefilledRoom = routeState?.roomName || "";
+  const prefilledDate = routeState?.selectedDate || queryDate;
+  const hasPrefilledRoom = Boolean(prefilledRoom);
 
-  const [selectedRoom, setSelectedRoom] = useState(prefilledRoom);
-  const [eventName, setEventName] = useState("");
-  const [bookingDate, setBookingDate] = useState("");
+  const [step, setStep] = useState(1);
+  const [date, setDate] = useState(prefilledDate);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
+  const [minCapacity, setMinCapacity] = useState(1);
+  const [selectedRoom, setSelectedRoom] = useState(prefilledRoom);
+  const [eventName, setEventName] = useState("");
+  const [description, setDescription] = useState("");
   const [attendees, setAttendees] = useState("");
-  const [details, setDetails] = useState("");
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const [message, setMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
 
-  const availableRooms = useMemo(
-    () => roomOptions.filter((room) => room.status === "available"),
-    []
-  );
+  useEffect(() => {
+    getAvailableRooms({ minimumCapacity: minCapacity })
+      .then((rooms) => setAvailableRooms(rooms.filter((room) => room.status === "available")))
+      .catch((error) => setMessage(error instanceof Error ? error.message : "Could not load rooms from the API."));
+  }, [minCapacity]);
 
-  const selectedRoomInfo = availableRooms.find((room) => room.name === selectedRoom);
+  useEffect(() => {
+    if (prefilledDate) setDate(prefilledDate);
+  }, [prefilledDate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
 
-    if (!selectedRoom || !eventName || !bookingDate || !startTime || !endTime || !attendees) {
-      alert("Please complete all required fields.");
-      return;
-    }
-
-    alert(`Booking request submitted for ${selectedRoom}.`);
-
-    if (user?.role === "faculty") {
-      navigate("/faculty/bookings");
-      return;
-    }
-
-    if (user?.role === "admin") {
-      navigate("/admin/bookings");
-      return;
-    }
-
-    navigate("/student/bookings");
+  const handleBack = () => {
+    if (step === 1) navigate(`${base}/rooms`);
+    else setStep((s) => s - 1);
   };
 
-  const handleCancel = () => {
-    if (user?.role === "faculty") {
-      navigate("/faculty/rooms");
+  const handleNext = async () => {
+    setMessage("");
+    if (step === 1) {
+      if (!date || !startTime || !endTime) { setMessage("Please select date and time."); return; }
+      if (startTime >= endTime) { setMessage("End time must be after start time."); return; }
+      if (!hasPrefilledRoom) {
+        setIsSubmitting(true);
+        try {
+          const rooms = await getAvailableRooms({ date, startTime, endTime, minimumCapacity: minCapacity });
+          setAvailableRooms(rooms.filter((room) => room.status === "available"));
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Could not load rooms from the API.");
+          return;
+        } finally {
+          setIsSubmitting(false);
+        }
+      }
+      setStep(hasPrefilledRoom ? 3 : 2);
       return;
     }
-
-    if (user?.role === "admin") {
-      navigate("/admin/rooms");
+    if (step === 2) {
+      if (!selectedRoom) { setMessage("Please select a room."); return; }
+    }
+    if (step === 3) {
+      if (!eventName.trim() || !attendees) { setMessage("Please fill all required fields."); return; }
+      setIsSubmitting(true);
+      try {
+        await createBooking({
+          title: eventName,
+          roomId: routeState?.roomId,
+          roomName: selectedRoom,
+          date,
+          startTime,
+          endTime,
+          attendees: Number(attendees),
+          requesterRole: user?.role || "student",
+          requesterName: user?.name || "Requester",
+          requesterId: user?.id,
+          requesterEmail: user?.email,
+          hasDocument: Boolean(attachment),
+          attachment,
+          description,
+        } as any);
+        navigate(`${base}/booking-confirmation`, { state: { room: selectedRoom, date, time: `${startTime} - ${endTime}`, event: eventName } });
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Could not submit booking request.");
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
-
-    navigate("/student/rooms");
+    setStep((s) => s + 1);
   };
+
+  const priorityLabel =
+    user?.role === "faculty" ? "Faculty (High Priority)" :
+    user?.role === "club" ? "Club (Medium Priority)" :
+    user?.role === "admin" ? "Admin" : "Student (Standard)";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-2xl mx-auto" style={DM_SANS}>
+      {/* Header */}
       <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          className="rounded-xl border-gray-300 dark:border-gray-700 dark:text-gray-300"
-          onClick={handleCancel}
+        <button
+          onClick={handleBack}
+          className="w-9 h-9 rounded-lg flex items-center justify-center border transition-colors hover:bg-[#891D1A]/10"
+          style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Back
-        </Button>
-
+          <ArrowLeft className="w-4 h-4" />
+        </button>
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">New Booking</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Submit a classroom reservation request
+          <h1 style={{ ...PLAYFAIR, fontSize: 24, fontWeight: 600 }} className="text-foreground">
+            New Booking
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: "#5E657B" }}>
+            {hasPrefilledRoom ? `Reserve ${prefilledRoom}` : "Submit a classroom reservation request"}
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <Card className="xl:col-span-2 rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-          <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-white">Booking Details</CardTitle>
-          </CardHeader>
+      {message && (
+        <div
+          className="rounded-lg px-4 py-3 text-sm font-medium"
+          style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+        >
+          {message}
+        </div>
+      )}
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-2">
-                <Label className="dark:text-gray-300">Select Room</Label>
-                <Select value={selectedRoom} onValueChange={setSelectedRoom}>
-                  <SelectTrigger className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                    <SelectValue placeholder="Choose an available room" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableRooms.map((room) => (
-                      <SelectItem key={room.name} value={room.name}>
-                        {room.name} • {room.building} • {room.capacity} seats
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+      {/* Step progress */}
+      <div className="bg-card rounded-xl p-5 shadow-sm">
+        <div className="flex items-center">
+          <StepDot step={1} current={step} />
+          <StepDot step={2} current={step} />
+          <StepDot step={3} current={step} />
+        </div>
+        <div className="flex justify-between mt-2">
+          {(hasPrefilledRoom ? ["Choose Time", "Room Selected", "Booking Details"] : ["Find a Room", "Select Room", "Booking Details"]).map((label, i) => (
+            <span
+              key={label}
+              className="text-xs"
+              style={{ color: step === i + 1 ? "#891D1A" : "#5E657B", fontWeight: step === i + 1 ? 600 : 400 }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="event-name" className="dark:text-gray-300">
-                  Event Name
-                </Label>
-                <Input
-                  id="event-name"
-                  value={eventName}
-                  onChange={(e) => setEventName(e.target.value)}
-                  placeholder="Example: AI Club Workshop"
-                  className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
-              </div>
+      {/* Step 1 */}
+      {step === 1 && (
+        <div className="bg-card rounded-xl p-6 shadow-sm space-y-5">
+          <h2 style={{ ...PLAYFAIR, fontSize: 20, fontWeight: 600 }} className="text-foreground">
+            {hasPrefilledRoom ? `When do you need ${prefilledRoom}?` : "When do you need a room?"}
+          </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="booking-date" className="dark:text-gray-300">
-                    Date
-                  </Label>
-                  <Input
-                    id="booking-date"
-                    type="date"
-                    value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
-                    className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  />
-                </div>
+          {hasPrefilledRoom && (
+            <div
+              className="rounded-lg p-3 text-sm"
+              style={{ background: "rgba(137,29,26,0.05)", border: "1px solid rgba(137,29,26,0.15)" }}
+            >
+              <span style={{ color: "#5E657B" }}>Selected room: </span>
+              <span className="font-semibold text-foreground">{prefilledRoom}</span>
+            </div>
+          )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="start-time" className="dark:text-gray-300">
-                    Start Time
-                  </Label>
-                  <Input
-                    id="start-time"
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  />
-                </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30"
+              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+            />
+          </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="end-time" className="dark:text-gray-300">
-                    End Time
-                  </Label>
-                  <Input
-                    id="end-time"
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>From</label>
+              <input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30"
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium" style={{ color: "#5E657B" }}>To</label>
+              <input
+                type="time"
+                value={endTime}
+                onChange={(e) => setEndTime(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30"
+                style={{ borderColor: "rgba(137,29,26,0.2)" }}
+              />
+            </div>
+          </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="attendees" className="dark:text-gray-300">
-                  Expected Attendees
-                </Label>
-                <Input
-                  id="attendees"
-                  type="number"
-                  min="1"
-                  value={attendees}
-                  onChange={(e) => setAttendees(e.target.value)}
-                  placeholder="Enter expected number of attendees"
-                  className="rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
-              </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Min. Capacity: <span style={{ color: "#891D1A" }}>{minCapacity}+</span>
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={200}
+              value={minCapacity}
+              onChange={(e) => setMinCapacity(Number(e.target.value))}
+              className="w-full accent-[#891D1A]"
+            />
+            <div className="flex justify-between text-xs" style={{ color: "#5E657B" }}>
+              <span>1</span><span>200</span>
+            </div>
+          </div>
+        </div>
+      )}
 
-              <div className="space-y-2">
-                <Label htmlFor="details" className="dark:text-gray-300">
-                  Event Details
-                </Label>
-                <Textarea
-                  id="details"
-                  value={details}
-                  onChange={(e) => setDetails(e.target.value)}
-                  placeholder="Add a short description of the event, class, or meeting"
-                  className="min-h-[120px] rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white"
-                />
-              </div>
+      {/* Step 2 */}
+      {step === 2 && (
+        <div className="bg-card rounded-xl p-6 shadow-sm space-y-4">
+          <h2 style={{ ...PLAYFAIR, fontSize: 20, fontWeight: 600 }} className="text-foreground">
+            Available Rooms
+          </h2>
+          <p className="text-sm" style={{ color: "#5E657B" }}>
+            {date} · {startTime} – {endTime} · {minCapacity}+ seats
+          </p>
 
-              <div className="flex items-center justify-end gap-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-xl border-gray-300 dark:border-gray-700 dark:text-gray-300"
-                  onClick={handleCancel}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {availableRooms.map((room) => {
+              const isSelected = selectedRoom === room.name;
+              return (
+                <button
+                  key={room.name}
+                  onClick={() => setSelectedRoom(room.name)}
+                  className="relative text-left rounded-xl p-4 border-2 transition-all"
+                  style={{
+                    borderColor: isSelected ? "#891D1A" : "rgba(137,29,26,0.15)",
+                    background: isSelected ? "rgba(137,29,26,0.04)" : "#FFFFFF",
+                  }}
                 >
-                  Cancel
-                </Button>
-
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-700 rounded-xl">
-                  Submit Booking Request
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-          <CardHeader>
-            <CardTitle className="text-gray-900 dark:text-white">Booking Summary</CardTitle>
-          </CardHeader>
-
-          <CardContent className="space-y-4">
-            <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800 space-y-3">
-              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <DoorOpen className="w-4 h-4" />
-                <span className="font-medium">Room:</span>
-                <span>{selectedRoom || "Not selected"}</span>
-              </div>
-
-              {selectedRoomInfo && (
-                <>
-                  <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                    <Users className="w-4 h-4" />
-                    <span className="font-medium">Capacity:</span>
-                    <span>{selectedRoomInfo.capacity} seats</span>
+                  {isSelected && (
+                    <div
+                      className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                      style={{ background: "#891D1A" }}
+                    >
+                      <Check className="w-3 h-3 text-white" />
+                    </div>
+                  )}
+                  <p style={{ ...PLAYFAIR, fontSize: 15, fontWeight: 600 }} className="text-foreground">
+                    {room.name}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>{room.building} · {room.type}</p>
+                  <div className="flex items-center gap-1 mt-2 text-xs" style={{ color: "#5E657B" }}>
+                    <Users className="w-3 h-3" /> {room.capacity} seats
                   </div>
-
-                  <div className="text-sm text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Building:</span> {selectedRoomInfo.building}
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {room.equipment.slice(0, 3).map((eq, i) => (
+                      <span
+                        key={i}
+                        className="text-xs px-1.5 py-0.5 rounded"
+                        style={{ background: "#F1E6D2", color: "#5E657B" }}
+                      >
+                        {eq}
+                      </span>
+                    ))}
                   </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-                  <Badge className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950">
-                    Available
-                  </Badge>
-                </>
-              )}
+      {/* Step 3 */}
+      {step === 3 && (
+        <div className="bg-card rounded-xl p-6 shadow-sm space-y-5">
+          <h2 style={{ ...PLAYFAIR, fontSize: 20, fontWeight: 600 }} className="text-foreground">
+            Booking Details
+          </h2>
 
-              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <CalendarDays className="w-4 h-4" />
-                <span className="font-medium">Date:</span>
-                <span>{bookingDate || "Not selected"}</span>
-              </div>
+          <div
+            className="rounded-lg p-3 text-sm"
+            style={{ background: "rgba(137,29,26,0.05)", border: "1px solid rgba(137,29,26,0.15)" }}
+          >
+            <span style={{ color: "#5E657B" }}>Room: </span>
+            <span className="font-semibold text-foreground">{selectedRoom}</span>
+            <span className="mx-2 text-[#5E657B]">·</span>
+            <span style={{ color: "#5E657B" }}>{date}</span>
+            <span className="mx-2 text-[#5E657B]">·</span>
+            <span style={{ color: "#5E657B" }}>{startTime} – {endTime}</span>
+          </div>
 
-              <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-                <Clock3 className="w-4 h-4" />
-                <span className="font-medium">Time:</span>
-                <span>
-                  {startTime && endTime ? `${startTime} - ${endTime}` : "Not selected"}
-                </span>
-              </div>
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Event Title <span style={{ color: "#891D1A" }}>*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. AI Club Workshop"
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30"
+              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+            />
+          </div>
 
-            <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30 p-4">
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-300">
-                Booking Workflow
-              </p>
-              <p className="text-sm text-blue-700 dark:text-blue-400 mt-2">
-                Student and faculty requests are submitted to the booking workflow. Faculty requests
-                can receive higher priority approval.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Description</label>
+            <textarea
+              placeholder="Briefly describe the event or meeting purpose…"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 resize-none"
+              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              Expected Attendees <span style={{ color: "#891D1A" }}>*</span>
+            </label>
+            <input
+              type="number"
+              min={1}
+              placeholder="Number of attendees"
+              value={attendees}
+              onChange={(e) => setAttendees(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30"
+              style={{ borderColor: "rgba(137,29,26,0.2)" }}
+            />
+          </div>
+
+          {/* File upload */}
+          <div
+            className="relative rounded-lg border-2 border-dashed p-6 text-center"
+            style={{ borderColor: "rgba(137,29,26,0.3)" }}
+          >
+            <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: "#891D1A" }} />
+            <p className="text-sm font-medium" style={{ color: "#5E657B" }}>
+              {attachment ? attachment.name : "Drag & drop files here, or "}
+              {!attachment && <span style={{ color: "#891D1A" }} className="cursor-pointer">browse</span>}
+            </p>
+            <p className="text-xs mt-1" style={{ color: "#A89B8A" }}>
+              {attachment ? "This file will be attached to your booking request." : "Supporting documents, event briefs, etc."}
+            </p>
+            <input
+              type="file"
+              className="absolute inset-0 opacity-0 cursor-pointer"
+              onChange={(e) => setAttachment(e.target.files?.[0] || null)}
+            />
+            {attachment && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setAttachment(null); }}
+                className="relative z-10 mt-3 text-xs font-medium"
+                style={{ color: "#891D1A" }}
+              >
+                Remove file
+              </button>
+            )}
+          </div>
+
+          {/* Priority note */}
+          <div
+            className="rounded-lg p-3 text-sm"
+            style={{ background: "rgba(94,101,123,0.08)", border: "1px solid rgba(94,101,123,0.15)" }}
+          >
+            <span className="font-medium" style={{ color: "#5E657B" }}>Priority: </span>
+            <span className="font-semibold" style={{ color: "#210706" }}>{priorityLabel}</span>
+            <p className="text-xs mt-1" style={{ color: "#5E657B" }}>
+              Your booking will be processed at this priority level.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation */}
+      <div className="flex justify-between">
+        <button
+          onClick={handleBack}
+          className="px-5 py-2.5 rounded-full text-sm font-medium border transition-colors"
+          style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
+        >
+          {step === 1 ? "Cancel" : "Back"}
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={isSubmitting}
+          className="px-6 py-2.5 rounded-full text-sm font-medium text-white flex items-center gap-2 transition-colors"
+          style={{ background: "#891D1A" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#210706")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#891D1A")}
+        >
+          {isSubmitting ? (step === 1 ? "Searching..." : "Submitting...") : step === 1 ? (hasPrefilledRoom ? "Continue" : "Search Availability") : step === 3 ? "Submit Booking Request" : "Continue"}
+          {step < 3 && <ArrowRight className="w-4 h-4" />}
+        </button>
       </div>
     </div>
   );

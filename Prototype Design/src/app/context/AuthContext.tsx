@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { getSession, loginWithApi, logoutWithApi, signupWithApi } from '../services/classReserveService';
 
-type UserRole = 'student' | 'faculty' | 'admin';
+export type UserRole = 'student' | 'club' | 'faculty' | 'admin';
 
-interface User {
+export interface User {
+  id?: number | string;
   name: string;
   email: string;
   role: UserRole;
@@ -10,48 +12,115 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, role: UserRole) => void;
-  signup: (name: string, email: string, password: string, role: UserRole) => void;
-  logout: () => void;
+  isLoading: boolean;
+  login: (email: string, password: string, role: UserRole) => Promise<User>;
+  signup: (name: string, email: string, password: string, role: UserRole) => Promise<User>;
+  logout: () => Promise<void>;
+  updateUser: (user: User) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const CURRENT_USER_KEY = 'user';
+
+function readSavedUser() {
+  const saved = localStorage.getItem(CURRENT_USER_KEY);
+  return saved ? JSON.parse(saved) as User : null;
+}
+
+function saveCurrentUser(user: User) {
+  localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(user));
+}
+
+function clearCurrentUser() {
+  localStorage.removeItem(CURRENT_USER_KEY);
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem('user');
-    return saved ? JSON.parse(saved) : null;
+    return readSavedUser();
   });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = (email: string, _password: string, role: UserRole) => {
-    const mockUser: User = {
-      name:
-        role === 'admin'
-          ? 'System Admin'
-          : role === 'faculty'
-            ? 'Dr. Sarah Johnson'
-            : 'Michael Chen',
-      email,
-      role,
-    };
+  useEffect(() => {
+    getSession()
+      .then((data) => {
+        const savedUser = readSavedUser();
+        if (savedUser) {
+          setUser(savedUser);
+          return;
+        }
 
-    setUser(mockUser);
-    localStorage.setItem('user', JSON.stringify(mockUser));
+        if (data.user) {
+          setUser(data.user);
+          saveCurrentUser(data.user);
+        } else {
+          setUser(null);
+          clearCurrentUser();
+        }
+      })
+      .catch(() => {
+        // Keep local mock user if the PHP API is not running.
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const login = async (email: string, password: string, role: UserRole) => {
+    try {
+      const apiUser = await loginWithApi(email, password);
+      const nextUser: User = {
+        id: apiUser.id,
+        name: apiUser.name,
+        email: apiUser.email || email,
+        role: apiUser.role,
+      };
+
+      if (nextUser.role !== role) {
+        throw new Error(`This account is registered as ${nextUser.role}. Please choose the correct role.`);
+      }
+
+      setUser(nextUser);
+      saveCurrentUser(nextUser);
+      return nextUser;
+    } catch (error) {
+      const fallbackUser = readSavedUser();
+      if (!fallbackUser) {
+        throw error;
+      }
+
+      if (fallbackUser.email !== email || fallbackUser.role !== role) {
+        throw error;
+      }
+
+      setUser(fallbackUser);
+      return fallbackUser;
+    }
   };
 
-  const signup = (name: string, email: string, _password: string, role: UserRole) => {
-    const newUser: User = { name, email, role };
+  const signup = async (name: string, email: string, password: string, role: UserRole) => {
+    if (role === 'admin') {
+      throw new Error('Admin accounts are managed by the system.');
+    }
+
+    await signupWithApi(name, email, password, role);
+    const newUser: User = { id: `user-${Date.now()}`, name, email, role };
     setUser(newUser);
-    localStorage.setItem('user', JSON.stringify(newUser));
+    saveCurrentUser(newUser);
+    return newUser;
   };
 
-  const logout = () => {
+  const logout = async () => {
     setUser(null);
-    localStorage.removeItem('user');
+    clearCurrentUser();
+    await logoutWithApi().catch(() => undefined);
+  };
+
+  const updateUser = (nextUser: User) => {
+    setUser(nextUser);
+    saveCurrentUser(nextUser);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, signup, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

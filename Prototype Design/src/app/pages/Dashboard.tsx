@@ -1,173 +1,44 @@
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { DoorOpen, BookOpen, Clock, AlertTriangle } from "lucide-react";
-import { Badge } from "../components/ui/badge";
+import { useEffect, useState } from "react";
+import { AlertTriangle, BookOpen, Clock, DoorOpen, TrendingUp, Wrench } from "lucide-react";
+import { useNavigate } from "react-router";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { getDashboardStats } from "../services/classReserveService";
+import type { DashboardStats } from "../types/classReserve";
 
-const stats = [
-  { 
-    title: 'Total Rooms', 
-    value: '42', 
-    icon: DoorOpen, 
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-50 dark:bg-blue-950'
-  },
-  { 
-    title: 'Active Bookings', 
-    value: '18', 
-    icon: BookOpen, 
-    color: 'text-green-600 dark:text-green-400',
-    bgColor: 'bg-green-50 dark:bg-green-950'
-  },
-  { 
-    title: 'Pending Requests', 
-    value: '7', 
-    icon: Clock, 
-    color: 'text-yellow-600 dark:text-yellow-400',
-    bgColor: 'bg-yellow-50 dark:bg-yellow-950'
-  },
-  { 
-    title: 'Conflicts Today', 
-    value: '2', 
-    icon: AlertTriangle, 
-    color: 'text-red-600 dark:text-red-400',
-    bgColor: 'bg-red-50 dark:bg-red-950'
-  },
-];
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
-const recentActivity = [
-  {
-    user: 'Dr. Sarah Johnson',
-    action: 'booked',
-    room: 'Room A-301',
-    time: '2 minutes ago',
-    type: 'faculty',
-  },
-  {
-    user: 'Engineering Club',
-    action: 'requested',
-    room: 'Auditorium B',
-    time: '15 minutes ago',
-    type: 'club',
-  },
-  {
-    user: 'Admin',
-    action: 'approved booking for',
-    room: 'Lab C-105',
-    time: '1 hour ago',
-    type: 'approved',
-  },
-  {
-    user: 'Michael Chen',
-    action: 'requested',
-    room: 'Room D-202',
-    time: '2 hours ago',
-    type: 'student',
-  },
-  {
-    user: 'Admin',
-    action: 'marked',
-    room: 'Room E-101 as maintenance',
-    time: '3 hours ago',
-    type: 'maintenance',
-  },
-];
+function actionLabel(action: string) { return action.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
 
 export function Dashboard() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Admin Dashboard</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          System-wide overview of classroom booking system
-        </p>
-      </div>
+  const navigate = useNavigate();
+  const [data, setData] = useState<DashboardStats | null>(null);
+  const [error, setError] = useState("");
 
-      {/* Conflict Alerts */}
-      <Card className="rounded-2xl border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-red-600 dark:text-red-400 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-red-900 dark:text-red-300">
-                2 Scheduling Conflicts Detected
-              </p>
-              <p className="text-sm text-red-700 dark:text-red-400 mt-1">
-                Room D-202 has overlapping bookings for Apr 3, 2026. Immediate action required.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+  useEffect(() => {
+    getDashboardStats().then(setData).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load dashboard data."));
+  }, []);
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{stat.title}</p>
-                  <p className="text-3xl font-semibold text-gray-900 dark:text-white mt-2">
-                    {stat.value}
-                  </p>
-                </div>
-                <div className={`w-12 h-12 ${stat.bgColor} rounded-xl flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+  const stats = [
+    { title: "Total Rooms", value: data?.rooms.total ?? 0, icon: DoorOpen, color: "#5E657B" },
+    { title: "Available Rooms", value: data?.rooms.available ?? 0, icon: DoorOpen, color: "#3B6E4A" },
+    { title: "Pending Requests", value: data?.bookings.pending ?? 0, icon: Clock, color: "#B8860B" },
+    { title: "Approved Bookings", value: data?.bookings.approved ?? 0, icon: BookOpen, color: "#891D1A" },
+    { title: "Maintenance Rooms", value: data?.rooms.maintenance ?? 0, icon: Wrench, color: "#891D1A" },
+  ];
+  const quickActions = [
+    ["Manage Requests", "/admin/approvals"], ["Manage Rooms", "/admin/rooms"], ["Maintenance", "/admin/maintenance"],
+    ["Issue Reports", "/admin/issue-reports"], ["Calendar", "/admin/calendar"], ["Audit Logs", "/admin/audit-logs"],
+  ];
 
-      {/* Activity Feed */}
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardHeader>
-          <CardTitle className="dark:text-white">Recent Activity</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {recentActivity.map((activity, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-4 pb-4 last:pb-0 border-b last:border-b-0 border-gray-100 dark:border-gray-800"
-              >
-                <div className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                    {activity.user.charAt(0)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {activity.user}
-                    </span>
-                    <span className="text-gray-600 dark:text-gray-400">{activity.action}</span>
-                    <span className="font-medium text-gray-900 dark:text-white">
-                      {activity.room}
-                    </span>
-                    {activity.type === 'faculty' && (
-                      <Badge className="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-950">
-                        Faculty
-                      </Badge>
-                    )}
-                    {activity.type === 'club' && (
-                      <Badge className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950">
-                        Club
-                      </Badge>
-                    )}
-                    {activity.type === 'student' && (
-                      <Badge className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950">
-                        Student
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{activity.time}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+  return <div className="space-y-6" style={DM_SANS}>
+    <div><h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">Admin Dashboard</h1><p className="text-sm mt-1" style={{ color: "#5E657B" }}>System-wide overview of the classroom booking platform</p></div>
+    {error && <div className="rounded-xl p-4 flex gap-3" style={{ background: "rgba(137,29,26,0.06)", border: "1px solid rgba(137,29,26,0.2)", color: "#891D1A" }}><AlertTriangle className="w-5 h-5" /><p className="text-sm">{error}</p></div>}
+    <div className="bg-card rounded-xl p-4 shadow-sm flex flex-wrap gap-2">{quickActions.map(([label, path]) => <button key={path} onClick={() => navigate(path)} className="px-4 py-2 rounded-lg text-sm font-medium border hover:bg-[#891D1A]/5" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}>{label}</button>)}</div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">{stats.map((stat) => <div key={stat.title} className="bg-card rounded-xl p-5 shadow-sm" style={{ borderLeft: `3px solid ${stat.color}` }}><div className="flex items-center justify-between mb-3"><p className="text-xs text-[#5E657B]">{stat.title}</p><div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${stat.color}18` }}><stat.icon className="w-4 h-4" style={{ color: stat.color }} /></div></div><p className="text-[#210706] dark:text-[#F1E6D2]" style={{ ...PLAYFAIR, fontSize: 32, fontWeight: 700 }}>{stat.value}</p></div>)}</div>
+    <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+      <div className="xl:col-span-3 bg-card rounded-xl shadow-sm overflow-hidden"><div className="px-5 py-4 border-b border-border"><h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }}>Recent Activity</h3></div><div className="p-5 space-y-4">{data?.recent_activity.length ? data.recent_activity.map((item) => <div key={item.id} className="flex items-start gap-3"><div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold text-white" style={{ background: "#891D1A" }}>{(item.user_name || "S").charAt(0)}</div><div><p className="text-sm font-semibold text-foreground">{item.user_name || "System"}</p><p className="text-xs mt-1" style={{ color: "#5E657B" }}>{actionLabel(item.action)}{item.target_type ? ` ${item.target_type} #${item.target_id || ""}` : ""} · {item.created_at}</p></div></div>) : <p className="text-sm" style={{ color: "#5E657B" }}>No audit activity recorded yet.</p>}</div></div>
+      <div className="xl:col-span-2 bg-card rounded-xl shadow-sm overflow-hidden"><div className="px-5 py-4 border-b border-border flex items-center gap-2"><TrendingUp className="w-4 h-4" style={{ color: "#891D1A" }} /><h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }}>Bookings by Role</h3></div><div className="p-5"><ResponsiveContainer width="100%" height={220}><BarChart data={data?.bookings_by_role || []} margin={{ left: -20 }}><CartesianGrid strokeDasharray="3 3" stroke="rgba(94,101,123,0.15)" /><XAxis dataKey="role" tick={{ fill: "#5E657B", fontSize: 12 }} /><YAxis allowDecimals={false} tick={{ fill: "#5E657B", fontSize: 12 }} /><Tooltip /><Bar dataKey="count" name="Bookings" fill="#891D1A" radius={[4, 4, 0, 0]} /></BarChart></ResponsiveContainer></div></div>
     </div>
-  );
+  </div>;
 }

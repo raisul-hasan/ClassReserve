@@ -1,260 +1,676 @@
-import { useState } from "react";
-import { useNavigate } from "react-router";
-import { Card, CardContent } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../components/ui/select";
-import { Input } from "../components/ui/input";
-import { Users, Calendar } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
+import { Users, LayoutGrid, List, ExternalLink, Plus, X, Pencil, Power } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { createRoom, getAvailableRooms } from "../services/classReserveService";
+import { Room } from "../types/classReserve";
 
-const rooms = [
-  {
-    id: 1,
-    name: "Room A-301",
-    capacity: 30,
-    status: "available",
-    equipment: ["Projector", "Whiteboard", "Wi-Fi"],
-    building: "Building A",
-  },
-  {
-    id: 2,
-    name: "Room A-302",
-    capacity: 40,
-    status: "booked",
-    equipment: ["Projector", "Computer", "Wi-Fi"],
-    building: "Building A",
-  },
-  {
-    id: 3,
-    name: "Lab C-105",
-    capacity: 25,
-    status: "available",
-    equipment: ["Computers", "Wi-Fi", "Projector"],
-    building: "Building C",
-  },
-  {
-    id: 4,
-    name: "Auditorium B",
-    capacity: 200,
-    status: "available",
-    equipment: ["Audio System", "Projector", "Stage"],
-    building: "Building B",
-  },
-  {
-    id: 5,
-    name: "Room D-202",
-    capacity: 35,
-    status: "maintenance",
-    equipment: ["Whiteboard", "Wi-Fi"],
-    building: "Building D",
-  },
-  {
-    id: 6,
-    name: "Room E-101",
-    capacity: 20,
-    status: "available",
-    equipment: ["TV Display", "Wi-Fi"],
-    building: "Building E",
-  },
-  {
-    id: 7,
-    name: "Lab C-106",
-    capacity: 30,
-    status: "booked",
-    equipment: ["Computers", "Wi-Fi", "Printer"],
-    building: "Building C",
-  },
-  {
-    id: 8,
-    name: "Room B-205",
-    capacity: 45,
-    status: "available",
-    equipment: ["Projector", "Whiteboard", "Wi-Fi", "Computer"],
-    building: "Building B",
-  },
-];
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
+
+function statusStyle(status: string) {
+  switch (status) {
+    case "available": return { bg: "#3B6E4A", label: "Available", border: "#3B6E4A" };
+    case "booked": return { bg: "#891D1A", label: "Booked", border: "#891D1A" };
+    case "maintenance": return { bg: "#B8860B", label: "Maintenance", border: "#B8860B" };
+    default: return { bg: "#5E657B", label: status, border: "#5E657B" };
+  }
+}
 
 export function Rooms() {
+  const location = useLocation();
+  const initialSearch = (location.state as { searchQuery?: string } | null)?.searchQuery || "";
+  const [searchQuery, setSearchQuery] = useState(initialSearch);
+  const [dateFilter, setDateFilter] = useState("");
+  const [startTimeFilter, setStartTimeFilter] = useState("");
+  const [endTimeFilter, setEndTimeFilter] = useState("");
   const [capacityFilter, setCapacityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [buildingFilter, setBuildingFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [equipmentFilter, setEquipmentFilter] = useState("all");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [roomModalOpen, setRoomModalOpen] = useState(false);
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
+  const [message, setMessage] = useState("");
+  const [isSavingRoom, setIsSavingRoom] = useState(false);
+  const [roomForm, setRoomForm] = useState({
+    name: "",
+    building: "",
+    floor: "",
+    capacity: "30",
+    type: "Lecture" as Room["type"],
+    status: "available" as Room["status"],
+    equipment: "",
+    notes: "",
+  });
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const filteredRooms = rooms.filter((room) => {
-    if (capacityFilter !== "all") {
-      const cap = parseInt(capacityFilter);
-      if (room.capacity < cap) return false;
-    }
-    if (statusFilter !== "all" && room.status !== statusFilter) {
-      return false;
-    }
+  useEffect(() => {
+    getAvailableRooms()
+      .then(setRooms)
+      .catch((reason) => setMessage(reason instanceof Error ? reason.message : "Could not load rooms from the API."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const filtered = rooms.filter((r) => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q && ![
+      r.name,
+      r.building,
+      r.type,
+      r.status,
+      ...r.equipment,
+    ].some((value) => String(value).toLowerCase().includes(q))) return false;
+    if (capacityFilter !== "all" && r.capacity < parseInt(capacityFilter)) return false;
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (buildingFilter !== "all" && r.building !== buildingFilter) return false;
+    if (typeFilter !== "all" && r.type !== typeFilter) return false;
+    if (equipmentFilter !== "all" && !r.equipment.includes(equipmentFilter)) return false;
+    if (startTimeFilter && endTimeFilter && startTimeFilter >= endTimeFilter) return false;
     return true;
   });
 
-  const handleRequest = (roomName: string) => {
-    if (user?.role === "faculty") {
-      navigate("/faculty/new-booking", { state: { roomName } });
+  const buildings = Array.from(new Set(rooms.map((r) => r.building)));
+  const equipment = Array.from(new Set(rooms.flatMap((r) => r.equipment))).sort();
+
+  const base = user?.role === "faculty" ? "/faculty" : user?.role === "admin" ? "/admin" : user?.role === "club" ? "/club" : "/student";
+  const isAdmin = user?.role === "admin";
+  const bookActionLabel = user?.role === "faculty" ? "Reserve this Room" : user?.role === "club" ? "Book Event Room" : "Book this Room";
+
+  const handleBook = (roomName: string) => {
+    if (isAdmin) return;
+    const room = rooms.find((item) => item.name === roomName);
+    navigate(`${base}/new-booking`, { state: { roomName, roomId: room?.id, startAtStep: 2 } });
+  };
+
+  const handleViewDetail = (roomName: string) => {
+    navigate(`${base}/rooms/${encodeURIComponent(roomName)}`);
+  };
+
+  const resetRoomForm = () => {
+    setEditingRoomId(null);
+    setRoomForm({
+      name: "",
+      building: "",
+      floor: "",
+      capacity: "30",
+      type: "Lecture",
+      status: "available",
+      equipment: "",
+      notes: "",
+    });
+  };
+
+  const refreshRooms = () => {
+    setIsLoading(true);
+    getAvailableRooms()
+      .then(setRooms)
+      .catch((reason) => setMessage(reason instanceof Error ? reason.message : "Could not load rooms from the API."))
+      .finally(() => setIsLoading(false));
+  };
+
+  const handleAddRoom = async () => {
+    setMessage("");
+    if (!roomForm.name.trim() || !roomForm.building.trim() || !roomForm.type) {
+      setMessage("Room name, building, and type are required.");
+      return;
+    }
+    const capacity = Number(roomForm.capacity);
+    if (!Number.isFinite(capacity) || capacity <= 0) {
+      setMessage("Capacity must be a positive number.");
       return;
     }
 
-    if (user?.role === "admin") {
-      navigate("/admin/new-booking", { state: { roomName } });
-      return;
+    setIsSavingRoom(true);
+    try {
+      if (editingRoomId !== null) {
+        const updatedRoom: Room = {
+          id: editingRoomId,
+          name: roomForm.name.trim(),
+          building: roomForm.building.trim(),
+          floor: roomForm.floor.trim(),
+          capacity,
+          type: roomForm.type,
+          status: roomForm.status,
+          equipment: roomForm.equipment.split(",").map((item) => item.trim()).filter(Boolean),
+        };
+        setRooms((prev) => prev.map((room) => room.id === editingRoomId ? updatedRoom : room).sort((a, b) => a.name.localeCompare(b.name)));
+        setRoomModalOpen(false);
+        resetRoomForm();
+        setMessage("Room updated locally.");
+        return;
+      }
+      const created = await createRoom({
+        name: roomForm.name.trim(),
+        building: roomForm.building.trim(),
+        floor: roomForm.floor.trim(),
+        capacity,
+        type: roomForm.type,
+        status: roomForm.status,
+        equipment: roomForm.equipment.split(",").map((item) => item.trim()).filter(Boolean),
+        notes: roomForm.notes.trim(),
+      });
+      setRooms((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setRoomModalOpen(false);
+      resetRoomForm();
+      setMessage("Room added.");
+      refreshRooms();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not add room.");
+    } finally {
+      setIsSavingRoom(false);
     }
-
-    navigate("/student/new-booking", { state: { roomName } });
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "available":
-        return (
-          <Badge className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950">
-            Available
-          </Badge>
-        );
-      case "booked":
-        return (
-          <Badge className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950">
-            Booked
-          </Badge>
-        );
-      case "maintenance":
-        return (
-          <Badge className="bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950">
-            Maintenance
-          </Badge>
-        );
-      default:
-        return null;
-    }
+  const openEditRoom = (room: Room) => {
+    setEditingRoomId(room.id);
+    setRoomForm({
+      name: room.name,
+      building: room.building,
+      floor: room.floor || "",
+      capacity: String(room.capacity),
+      type: room.type,
+      status: room.status,
+      equipment: room.equipment.join(", "),
+      notes: "",
+    });
+    setRoomModalOpen(true);
   };
+
+  const toggleRoomStatus = (room: Room) => {
+    const nextStatus = room.status === "disabled" ? "available" : "disabled";
+    setRooms((prev) => prev.map((item) => item.id === room.id ? { ...item, status: nextStatus } : item));
+    setMessage(`${room.name} ${nextStatus === "disabled" ? "disabled" : "enabled"} locally.`);
+  };
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setDateFilter("");
+    setStartTimeFilter("");
+    setEndTimeFilter("");
+    setCapacityFilter("all");
+    setStatusFilter("all");
+    setBuildingFilter("all");
+    setTypeFilter("all");
+    setEquipmentFilter("all");
+  };
+
+  const selectCls =
+    "px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none cursor-pointer";
+  const inputCls =
+    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none focus:ring-2 focus:ring-[#891D1A]/30 text-sm";
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">Rooms</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Browse and manage classroom spaces
-        </p>
+    <div className="space-y-5" style={DM_SANS}>
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div>
+          <h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">
+            Rooms
+          </h1>
+          <p className="text-sm mt-1" style={{ color: "#5E657B" }}>
+            {isLoading ? "Loading classroom spaces..." : "Browse and manage classroom spaces"}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {user?.role === "admin" && (
+            <button
+              onClick={() => setRoomModalOpen(true)}
+              className="h-9 px-4 rounded-lg flex items-center gap-2 text-sm font-medium text-white transition-colors"
+              style={{ background: "#891D1A" }}
+            >
+              <Plus className="w-4 h-4" />
+              Add Room
+            </button>
+          )}
+          <button
+            onClick={() => setViewMode("grid")}
+            className="w-9 h-9 rounded-lg flex items-center justify-center border transition-colors"
+            style={
+              viewMode === "grid"
+                ? { background: "#891D1A", borderColor: "#891D1A", color: "#F1E6D2" }
+                : { borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }
+            }
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setViewMode("table")}
+            className="w-9 h-9 rounded-lg flex items-center justify-center border transition-colors"
+            style={
+              viewMode === "table"
+                ? { background: "#891D1A", borderColor: "#891D1A", color: "#F1E6D2" }
+                : { borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }
+            }
+          >
+            <List className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-4">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-              <Input
-                type="date"
-                className="rounded-xl border-gray-200 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
-                placeholder="Select date"
-              />
+      {message && (
+        <div
+          className="rounded-lg px-4 py-3 text-sm font-medium"
+          style={{ background: "rgba(137,29,26,0.08)", color: "#891D1A" }}
+        >
+          {message}
+        </div>
+      )}
+
+      {/* Filter Bar */}
+      <div
+        className="bg-card rounded-xl p-4 flex flex-wrap gap-3 items-end shadow-sm"
+      >
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Search</label>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Room, building, equipment..."
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Date</label>
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>From</label>
+          <input
+            type="time"
+            value={startTimeFilter}
+            onChange={(e) => setStartTimeFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>To</label>
+          <input
+            type="time"
+            value={endTimeFilter}
+            onChange={(e) => setEndTimeFilter(e.target.value)}
+            className="px-3 py-2 rounded-lg text-sm border bg-white dark:bg-[#3A1210] dark:text-[#F1E6D2] outline-none"
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Capacity</label>
+          <select
+            value={capacityFilter}
+            onChange={(e) => setCapacityFilter(e.target.value)}
+            className={selectCls}
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          >
+            <option value="all">All sizes</option>
+            <option value="20">20+ seats</option>
+            <option value="30">30+ seats</option>
+            <option value="40">40+ seats</option>
+            <option value="100">100+ seats</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={selectCls}
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          >
+            <option value="all">All status</option>
+            <option value="available">Available</option>
+            <option value="booked">Booked</option>
+            <option value="maintenance">Maintenance</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Building</label>
+          <select
+            value={buildingFilter}
+            onChange={(e) => setBuildingFilter(e.target.value)}
+            className={selectCls}
+            style={{ borderColor: "rgba(137,29,26,0.2)" }}
+          >
+            <option value="all">All buildings</option>
+            {buildings.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Type</label>
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+            <option value="all">All types</option>
+            <option value="Lecture">Lecture</option>
+            <option value="Lab">Lab</option>
+            <option value="Seminar">Seminar</option>
+            <option value="Auditorium">Auditorium</option>
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium" style={{ color: "#5E657B" }}>Equipment</label>
+          <select value={equipmentFilter} onChange={(e) => setEquipmentFilter(e.target.value)} className={selectCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+            <option value="all">Any equipment</option>
+            {equipment.map((item) => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </div>
+
+        <button
+          className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+          style={{ background: "#891D1A" }}
+          onClick={resetFilters}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Grid View */}
+      {viewMode === "grid" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filtered.map((room) => {
+            const s = statusStyle(room.status);
+            return (
+              <div
+                key={room.id}
+                className="bg-card rounded-xl shadow-sm overflow-hidden flex flex-col"
+                style={{ borderLeft: `3px solid ${s.border}` }}
+              >
+                <div className="p-5 flex-1">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <button
+                        onClick={() => handleViewDetail(room.name)}
+                        className="flex items-center gap-1 hover:underline text-left"
+                      >
+                        <h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }} className="text-foreground">
+                          {room.name}
+                        </h3>
+                        <ExternalLink className="w-3 h-3 opacity-50" style={{ color: "#891D1A" }} />
+                      </button>
+                      <span
+                        className="inline-block text-xs px-2 py-0.5 rounded-full text-white mt-1"
+                        style={{ background: "#5E657B" }}
+                      >
+                        {room.building}
+                      </span>
+                    </div>
+                    <span
+                      className="text-xs px-2.5 py-1 rounded-full text-white font-medium flex-shrink-0"
+                      style={{ background: s.bg }}
+                    >
+                      {s.label}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-3 text-sm" style={{ color: "#5E657B" }}>
+                    <Users className="w-4 h-4" />
+                    <span>{room.capacity} seats</span>
+                    <span className="text-xs">·</span>
+                    <span className="text-xs">{room.type}</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5">
+                    {room.equipment.map((eq, i) => (
+                      <span
+                        key={i}
+                        className="text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                        style={{
+                          background: "#F7EAD3",
+                          color: "#6F1D1B",
+                          border: "1px solid rgba(137,29,26,0.18)",
+                        }}
+                      >
+                        {eq}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="px-5 pb-5">
+                  {user?.role === "admin" && (
+                    <div className="flex gap-2 mb-2">
+                      <button
+                        onClick={() => openEditRoom(room)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+                      <button
+                        onClick={() => toggleRoomStatus(room)}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border flex items-center justify-center gap-1"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}
+                      >
+                        <Power className="w-3 h-3" /> {room.status === "disabled" ? "Enable" : "Disable"}
+                      </button>
+                      <button
+                        onClick={() => navigate("/admin/maintenance")}
+                        className="flex-1 py-1.5 rounded-lg text-xs font-medium border"
+                        style={{ borderColor: "rgba(137,29,26,0.25)", color: "#B8860B" }}
+                      >
+                        Maintenance
+                      </button>
+                    </div>
+                  )}
+                  {!isAdmin && (
+                    <button
+                      onClick={() => handleBook(room.name)}
+                      disabled={room.status !== "available"}
+                      className="w-full py-2 rounded-lg text-sm font-medium text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ background: "#891D1A" }}
+                      onMouseEnter={(e) => { if (room.status === "available") e.currentTarget.style.background = "#210706"; }}
+                      onMouseLeave={(e) => { if (room.status === "available") e.currentTarget.style.background = "#891D1A"; }}
+                    >
+                      {room.status === "available" ? bookActionLabel : s.label}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {filtered.length === 0 && (
+            <div className="col-span-full py-12 text-center text-sm" style={{ color: "#5E657B" }}>
+              No rooms match your filters.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Table View */}
+      {viewMode === "table" && (
+        <div className="bg-card rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="px-5 py-3 font-medium text-xs" style={{ color: "#5E657B" }}>Room</th>
+                  <th className="px-5 py-3 font-medium text-xs" style={{ color: "#5E657B" }}>Capacity</th>
+                  <th className="px-5 py-3 font-medium text-xs" style={{ color: "#5E657B" }}>Status</th>
+                  <th className="px-5 py-3 font-medium text-xs" style={{ color: "#5E657B" }}>Equipment</th>
+                  <th className="px-5 py-3 font-medium text-xs text-right" style={{ color: "#5E657B" }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((room) => {
+                  const s = statusStyle(room.status);
+                  return (
+                    <tr key={room.id} className="border-b border-border last:border-0">
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-foreground" style={PLAYFAIR}>{room.name}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "#5E657B" }}>{room.building}</p>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-1.5" style={{ color: "#5E657B" }}>
+                          <Users className="w-4 h-4" /> {room.capacity}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-xs px-2.5 py-1 rounded-full text-white" style={{ background: s.bg }}>
+                          {s.label}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {room.equipment.slice(0, 3).map((eq, i) => (
+                            <span
+                              key={i}
+                              className="text-xs px-2.5 py-0.5 rounded-full font-semibold"
+                              style={{
+                                background: "#F7EAD3",
+                                color: "#6F1D1B",
+                                border: "1px solid rgba(137,29,26,0.18)",
+                              }}
+                            >
+                              {eq}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-right">
+                        {user?.role === "admin" && (
+                          <div className="flex justify-end gap-2 mb-2">
+                            <button onClick={() => openEditRoom(room)} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#5E657B" }}>
+                              Edit
+                            </button>
+                            <button onClick={() => toggleRoomStatus(room)} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#891D1A" }}>
+                              {room.status === "disabled" ? "Enable" : "Disable"}
+                            </button>
+                            <button onClick={() => navigate("/admin/maintenance")} className="px-2 py-1 rounded-lg text-xs border" style={{ borderColor: "rgba(137,29,26,0.25)", color: "#B8860B" }}>
+                              Maintenance
+                            </button>
+                          </div>
+                        )}
+                        {!isAdmin && (
+                          <button
+                            onClick={() => handleBook(room.name)}
+                            disabled={room.status !== "available"}
+                            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white disabled:opacity-40"
+                            style={{ background: "#891D1A" }}
+                          >
+                            {room.status === "available" ? bookActionLabel : s.label}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {roomModalOpen && user?.role === "admin" && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "rgba(33,7,6,0.55)" }}
+          onClick={() => setRoomModalOpen(false)}
+        >
+          <div
+            className="bg-card rounded-2xl shadow-2xl w-full max-w-xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 style={{ ...PLAYFAIR, fontSize: 18, fontWeight: 600 }} className="text-foreground">
+                Add Room
+              </h2>
+              <button
+                onClick={() => setRoomModalOpen(false)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-[#891D1A]/10"
+                style={{ color: "#5E657B" }}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <Select value={capacityFilter} onValueChange={setCapacityFilter}>
-              <SelectTrigger className="w-[180px] rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                <SelectValue placeholder="Capacity" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Capacities</SelectItem>
-                <SelectItem value="20">20+ people</SelectItem>
-                <SelectItem value="30">30+ people</SelectItem>
-                <SelectItem value="40">40+ people</SelectItem>
-                <SelectItem value="100">100+ people</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Room Name</label>
+                  <input value={roomForm.name} onChange={(e) => setRoomForm((p) => ({ ...p, name: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Room F-203" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Building</label>
+                  <input value={roomForm.building} onChange={(e) => setRoomForm((p) => ({ ...p, building: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Building F" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Floor</label>
+                  <input value={roomForm.floor} onChange={(e) => setRoomForm((p) => ({ ...p, floor: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="2nd Floor" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Capacity</label>
+                  <input type="number" min={1} value={roomForm.capacity} onChange={(e) => setRoomForm((p) => ({ ...p, capacity: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Type</label>
+                  <select value={roomForm.type} onChange={(e) => setRoomForm((p) => ({ ...p, type: e.target.value as Room["type"] }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+                    <option value="Lecture">Lecture</option>
+                    <option value="Lab">Lab</option>
+                    <option value="Seminar">Seminar</option>
+                    <option value="Auditorium">Auditorium</option>
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Status</label>
+                  <select value={roomForm.status} onChange={(e) => setRoomForm((p) => ({ ...p, status: e.target.value as Room["status"] }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }}>
+                    <option value="available">Available</option>
+                    <option value="maintenance">Maintenance</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                </div>
+              </div>
 
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[180px] rounded-xl dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="available">Available</SelectItem>
-                <SelectItem value="booked">Booked</SelectItem>
-                <SelectItem value="maintenance">Maintenance</SelectItem>
-              </SelectContent>
-            </Select>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Equipment</label>
+                <input value={roomForm.equipment} onChange={(e) => setRoomForm((p) => ({ ...p, equipment: e.target.value }))} className={inputCls} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Projector, Whiteboard, Wi-Fi" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium" style={{ color: "#5E657B" }}>Notes</label>
+                <textarea value={roomForm.notes} onChange={(e) => setRoomForm((p) => ({ ...p, notes: e.target.value }))} rows={3} className={inputCls + " resize-none"} style={{ borderColor: "rgba(137,29,26,0.2)" }} placeholder="Optional room notes" />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setRoomModalOpen(false)}
+                  className="px-4 py-2.5 rounded-lg text-sm font-medium border"
+                  style={{ borderColor: "rgba(137,29,26,0.3)", color: "#5E657B" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddRoom}
+                  disabled={isSavingRoom}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-white"
+                  style={{ background: "#891D1A" }}
+                >
+                  {isSavingRoom ? "Adding..." : "Add Room"}
+                </button>
+              </div>
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-gray-200 dark:border-gray-800">
-                <TableHead className="dark:text-gray-400">Room Name</TableHead>
-                <TableHead className="dark:text-gray-400">Capacity</TableHead>
-                <TableHead className="dark:text-gray-400">Status</TableHead>
-                <TableHead className="dark:text-gray-400">Equipment</TableHead>
-                <TableHead className="text-right dark:text-gray-400">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRooms.map((room) => (
-                <TableRow key={room.id} className="border-gray-200 dark:border-gray-800">
-                  <TableCell className="font-medium">
-                    <div>
-                      <p className="text-gray-900 dark:text-white">{room.name}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{room.building}</p>
-                    </div>
-                  </TableCell>
-
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-                      <span className="text-gray-700 dark:text-gray-300">{room.capacity}</span>
-                    </div>
-                  </TableCell>
-
-                  <TableCell>{getStatusBadge(room.status)}</TableCell>
-
-                  <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {room.equipment.slice(0, 3).map((eq, idx) => (
-                        <Badge
-                          key={idx}
-                          variant="outline"
-                          className="text-xs border-gray-300 dark:border-gray-700 dark:text-gray-300"
-                        >
-                          {eq}
-                        </Badge>
-                      ))}
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      className="bg-blue-600 hover:bg-blue-700 rounded-xl"
-                      disabled={room.status !== "available"}
-                      onClick={() => handleRequest(room.name)}
-                    >
-                      Request
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
   );
 }

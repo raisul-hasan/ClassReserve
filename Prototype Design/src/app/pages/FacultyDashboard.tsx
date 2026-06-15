@@ -1,369 +1,46 @@
-import { useState } from "react";
-import { Card, CardContent } from "../components/ui/card";
-import { Button } from "../components/ui/button";
-import { Badge } from "../components/ui/badge";
-import { Calendar, Check, X, Clock, AlertCircle, Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertCircle, Check, ChevronRight, Clock, Plus, Users, X } from "lucide-react";
+import { useNavigate } from "react-router";
+import { useAuth } from "../context/AuthContext";
+import { approveBooking, getAvailableRooms, getDashboardStats, getMyBookings, getPendingApprovals, rejectBooking } from "../services/classReserveService";
+import type { Booking, DashboardStats, Room } from "../types/classReserve";
 
-type RequestItem = {
-  id: number;
-  room: string;
-  requester: string;
-  role: "Student" | "Club";
-  event: string;
-  date: string;
-  time: string;
-  priority: "low" | "medium";
-};
-
-type Reservation = {
-  id: number;
-  room: string;
-  course: string;
-  date: string;
-  time: string;
-  recurring: string;
-};
-
-const initialPendingRequests: RequestItem[] = [
-  {
-    id: 1,
-    room: "Lab C-105",
-    requester: "Michael Chen",
-    role: "Student",
-    event: "Study Group Session",
-    date: "Apr 2, 2026",
-    time: "3:00 PM - 5:00 PM",
-    priority: "low",
-  },
-  {
-    id: 2,
-    room: "Room E-101",
-    requester: "Dance Club",
-    role: "Club",
-    event: "Dance Practice",
-    date: "Apr 5, 2026",
-    time: "4:00 PM - 6:00 PM",
-    priority: "medium",
-  },
-  {
-    id: 3,
-    room: "Room B-205",
-    requester: "Lisa Anderson",
-    role: "Student",
-    event: "Tutorial Session",
-    date: "Apr 4, 2026",
-    time: "11:00 AM - 12:00 PM",
-    priority: "low",
-  },
-];
-
-const initialReservations: Reservation[] = [
-  {
-    id: 1,
-    room: "Room A-301",
-    course: "Math 101",
-    date: "Apr 1, 2026",
-    time: "10:00 AM - 12:00 PM",
-    recurring: "Weekly",
-  },
-  {
-    id: 2,
-    room: "Lab C-106",
-    course: "Physics Lab",
-    date: "Apr 2, 2026",
-    time: "9:00 AM - 12:00 PM",
-    recurring: "Weekly",
-  },
-  {
-    id: 3,
-    room: "Auditorium B",
-    course: "Guest Lecture Series",
-    date: "Apr 4, 2026",
-    time: "1:00 PM - 3:00 PM",
-    recurring: "One-time",
-  },
-];
-
-const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-const timeSlots = ["9", "10", "11", "12", "1"];
-
-const calendarBookings = [
-  { day: 0, slot: 0, course: "Math 101" },
-  { day: 1, slot: 1, course: "Physics Lab" },
-  { day: 2, slot: 2, course: "Math 101" },
-  { day: 3, slot: 0, course: "Guest Lecture" },
-];
+const PLAYFAIR = { fontFamily: "'Playfair Display', serif" } as const;
+const DM_SANS = { fontFamily: "'DM Sans', sans-serif" } as const;
 
 export function FacultyDashboard() {
-  const [pendingRequests, setPendingRequests] = useState<RequestItem[]>(initialPendingRequests);
-  const [myReservations, setMyReservations] = useState<Reservation[]>(initialReservations);
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [requests, setRequests] = useState<Booking[]>([]);
+  const [reservations, setReservations] = useState<Booking[]>([]);
+  const [error, setError] = useState("");
 
-  const getPriorityBadge = (priority: string, role: string) => {
-    switch (priority) {
-      case "medium":
-        return (
-          <Badge className="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-950">
-            Medium - {role}
-          </Badge>
-        );
-      case "low":
-      default:
-        return (
-          <Badge className="bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950">
-            Low - {role}
-          </Badge>
-        );
-    }
+  const refresh = () => Promise.all([
+    getDashboardStats(), getAvailableRooms(), getPendingApprovals("faculty"),
+    getMyBookings({ role: "faculty", userId: user?.id, email: user?.email }),
+  ]).then(([dashboard, roomRows, approvalRows, bookingRows]) => {
+    setStats(dashboard); setRooms(roomRows); setRequests(approvalRows.filter((item) => item.status === "pending")); setReservations(bookingRows); setError("");
+  }).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load faculty dashboard data."));
+
+  useEffect(() => { refresh(); }, [user?.id, user?.email]);
+
+  const approve = async (id: number) => { try { await approveBooking(id); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Approval failed."); } };
+  const reject = async (id: number) => {
+    const reason = window.prompt("Reason for rejection:");
+    if (!reason?.trim()) return;
+    try { await rejectBooking(id, reason.trim()); await refresh(); } catch (failure) { setError(failure instanceof Error ? failure.message : "Rejection failed."); }
   };
 
-  const handleApprove = (requestId: number) => {
-    const selected = pendingRequests.find((item) => item.id === requestId);
-    if (!selected) return;
-
-    setPendingRequests((prev) => prev.filter((item) => item.id !== requestId));
-    setMyReservations((prev) => [
-      {
-        id: Date.now(),
-        room: selected.room,
-        course: selected.event,
-        date: selected.date,
-        time: selected.time,
-        recurring: "Approved",
-      },
-      ...prev,
-    ]);
-
-    alert(`Approved: ${selected.event}`);
-  };
-
-  const handleReject = (requestId: number) => {
-    const selected = pendingRequests.find((item) => item.id === requestId);
-    if (!selected) return;
-
-    setPendingRequests((prev) => prev.filter((item) => item.id !== requestId));
-    alert(`Rejected: ${selected.event}`);
-  };
-
-  const handleQuickReserve = () => {
-    const newReservation: Reservation = {
-      id: Date.now(),
-      room: "Room F-401",
-      course: "Faculty Reserved Session",
-      date: "Apr 7, 2026",
-      time: "2:00 PM - 4:00 PM",
-      recurring: "High Priority",
-    };
-
-    setMyReservations((prev) => [newReservation, ...prev]);
-    alert("Quick reserve created successfully.");
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-            Faculty Dashboard
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Manage your classes and review booking requests
-          </p>
-        </div>
-
-        <Button onClick={handleQuickReserve} className="bg-purple-600 hover:bg-purple-700 rounded-xl gap-2">
-          <Plus className="w-4 h-4" />
-          Quick Reserve (High Priority)
-        </Button>
-      </div>
-
-      <Card className="rounded-2xl border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-purple-600 dark:text-purple-400 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-purple-900 dark:text-purple-300">
-                Faculty Priority Booking Active
-              </p>
-              <p className="text-sm text-purple-700 dark:text-purple-400 mt-1">
-                Your booking requests have high priority and are typically approved first.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="lg:col-span-2 rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-          <CardContent className="p-0">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="font-semibold text-gray-900 dark:text-white">
-                Pending Student Requests
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                Review and approve booking requests
-              </p>
-            </div>
-
-            <div className="p-4 space-y-4">
-              {pendingRequests.map((request) => (
-                <div
-                  key={request.id}
-                  className="p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-white dark:bg-gray-800/50"
-                >
-                  <div className="flex items-start justify-between mb-3 gap-3">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">{request.event}</p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">{request.requester}</p>
-                    </div>
-                    {getPriorityBadge(request.priority, request.role)}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-3">
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Room:</span>
-                      <span className="ml-2 text-gray-900 dark:text-white font-medium">
-                        {request.room}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Date:</span>
-                      <span className="ml-2 text-gray-900 dark:text-white">{request.date}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1 text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    <Clock className="w-3 h-3" />
-                    {request.time}
-                  </div>
-
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 rounded-xl border-gray-300 dark:border-gray-700 hover:bg-red-50 dark:hover:bg-red-950/30 hover:border-red-300 dark:hover:border-red-800 hover:text-red-700 dark:hover:text-red-400"
-                      onClick={() => handleReject(request.id)}
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Reject
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      className="flex-1 bg-green-600 hover:bg-green-700 rounded-xl"
-                      onClick={() => handleApprove(request.id)}
-                    >
-                      <Check className="w-4 h-4 mr-1" />
-                      Approve
-                    </Button>
-                  </div>
-                </div>
-              ))}
-
-              {pendingRequests.length === 0 && (
-                <div className="p-6 text-center text-sm text-gray-500 dark:text-gray-400">
-                  No pending requests left.
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-          <CardContent className="p-0">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-              <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                <Calendar className="w-4 h-4" />
-                This Week
-              </h3>
-            </div>
-
-            <div className="p-4">
-              <div className="space-y-2">
-                {weekDays.map((day, dayIndex) => (
-                  <div key={day} className="flex items-center gap-2">
-                    <div className="w-12 text-xs font-medium text-gray-600 dark:text-gray-400">
-                      {day}
-                    </div>
-                    <div className="flex-1 flex gap-1">
-                      {timeSlots.map((_, slotIndex) => {
-                        const booking = calendarBookings.find(
-                          (b) => b.day === dayIndex && b.slot === slotIndex
-                        );
-
-                        return (
-                          <div
-                            key={slotIndex}
-                            className={`h-8 flex-1 rounded ${
-                              booking
-                                ? "bg-purple-100 dark:bg-purple-950 border border-purple-300 dark:border-purple-800"
-                                : "bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
-                            }`}
-                            title={booking?.course}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-4 flex items-center gap-2 text-xs">
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-purple-100 dark:bg-purple-950 border border-purple-300 dark:border-purple-800 rounded" />
-                  <span className="text-gray-600 dark:text-gray-400">Booked</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="w-3 h-3 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded" />
-                  <span className="text-gray-600 dark:text-gray-400">Free</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="rounded-2xl border-gray-200 dark:border-gray-800 dark:bg-gray-900">
-        <CardContent className="p-0">
-          <div className="p-4 border-b border-gray-200 dark:border-gray-800">
-            <h3 className="font-semibold text-gray-900 dark:text-white">
-              My Classes & Reservations
-            </h3>
-          </div>
-
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {myReservations.map((reservation) => (
-              <div
-                key={reservation.id}
-                className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
-              >
-                <div className="flex items-start justify-between mb-2 gap-3">
-                  <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{reservation.course}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{reservation.room}</p>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className="text-xs border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300"
-                  >
-                    {reservation.recurring}
-                  </Badge>
-                </div>
-
-                <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {reservation.date}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    {reservation.time}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+  return <div className="space-y-6" style={DM_SANS}>
+    <div className="flex items-center justify-between flex-wrap gap-4"><div><h1 style={{ ...PLAYFAIR, fontSize: 28, fontWeight: 600 }} className="text-foreground">Faculty Dashboard</h1><p className="text-sm mt-1" style={{ color: "#5E657B" }}>Manage your classes and review booking requests</p></div><button onClick={() => navigate("/faculty/new-booking")} className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium text-[#F1E6D2]" style={{ background: "#891D1A" }}><Plus className="w-4 h-4" />Reserve Room</button></div>
+    {error && <div className="rounded-xl p-4 flex gap-3" style={{ background: "rgba(137,29,26,0.06)", border: "1px solid rgba(137,29,26,0.2)", color: "#891D1A" }}><AlertCircle className="w-5 h-5" /><p className="text-sm">{error}</p></div>}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[["Total Rooms", stats?.rooms.total || 0], ["Available", stats?.rooms.available || 0], ["Pending Requests", stats?.bookings.pending || 0], ["Approved Bookings", stats?.bookings.approved || 0]].map(([label, value]) => <div key={String(label)} className="bg-card rounded-xl p-5 shadow-sm" style={{ borderLeft: "3px solid #891D1A" }}><p className="text-xs" style={{ color: "#5E657B" }}>{label}</p><p className="mt-2 text-2xl font-semibold text-foreground" style={PLAYFAIR}>{value}</p></div>)}</div>
+    <div className="bg-card rounded-xl shadow-sm overflow-hidden"><div className="px-5 py-4 border-b border-border flex items-center justify-between"><h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }}>Today's Rooms</h3><button className="text-sm font-medium flex items-center gap-1" style={{ color: "#891D1A" }} onClick={() => navigate("/faculty/rooms")}>View all <ChevronRight className="w-4 h-4" /></button></div><div className="p-4 flex gap-3 overflow-x-auto">{rooms.slice(0, 6).map((room) => <div key={room.id} className="flex-shrink-0 w-44 rounded-xl p-4 bg-white" style={{ border: "1px solid rgba(137,29,26,0.1)", borderLeft: `3px solid ${room.status === "available" ? "#3B6E4A" : "#891D1A"}` }}><p className="text-sm font-semibold truncate">{room.name}</p><p className="flex items-center gap-1 mt-1 text-xs" style={{ color: "#5E657B" }}><Users className="w-3 h-3" />{room.capacity}</p><button className="mt-3 text-xs font-medium" style={{ color: "#891D1A" }} onClick={() => navigate("/faculty/new-booking", { state: { roomName: room.name, roomId: room.id, startAtStep: 2 } })}>{room.status === "available" ? "Reserve" : room.status}</button></div>)}</div></div>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden"><div className="px-5 py-4 border-b border-border"><h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }}>Pending Student Requests</h3></div><div className="p-4 space-y-3">{requests.length ? requests.map((request) => <div key={request.id} className="rounded-xl p-4 bg-white" style={{ border: "1px solid rgba(137,29,26,0.12)" }}><p className="text-sm font-semibold">{request.title}</p><p className="text-xs mt-1" style={{ color: "#5E657B" }}>{request.requesterName} · {request.roomName}</p><p className="text-xs mt-1 flex items-center gap-1" style={{ color: "#5E657B" }}><Clock className="w-3 h-3" />{request.date} · {request.startTime} - {request.endTime}</p><div className="flex gap-2 mt-3"><button onClick={() => reject(request.id)} className="flex-1 py-2 rounded-lg text-sm text-white flex items-center justify-center gap-1" style={{ background: "#891D1A" }}><X className="w-4 h-4" />Reject</button><button onClick={() => approve(request.id)} className="flex-1 py-2 rounded-lg text-sm text-white flex items-center justify-center gap-1" style={{ background: "#3B6E4A" }}><Check className="w-4 h-4" />Approve</button></div></div>) : <p className="text-sm" style={{ color: "#5E657B" }}>No pending requests.</p>}</div></div>
+      <div className="bg-card rounded-xl shadow-sm overflow-hidden"><div className="px-5 py-4 border-b border-border"><h3 style={{ ...PLAYFAIR, fontSize: 16, fontWeight: 600 }}>My Reservations</h3></div><div className="p-4 space-y-3">{reservations.length ? reservations.slice(0, 6).map((booking) => <div key={booking.id} className="rounded-xl p-4 bg-white" style={{ borderLeft: `3px solid ${booking.status === "approved" ? "#3B6E4A" : "#B8860B"}` }}><p className="text-sm font-semibold">{booking.title}</p><p className="text-xs mt-1" style={{ color: "#5E657B" }}>{booking.roomName} · {booking.date} · {booking.startTime} - {booking.endTime}</p><p className="text-xs mt-1 capitalize" style={{ color: "#891D1A" }}>{booking.status}</p></div>) : <p className="text-sm" style={{ color: "#5E657B" }}>No reservations found.</p>}</div></div>
     </div>
-  );
+  </div>;
 }
