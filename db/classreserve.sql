@@ -123,9 +123,9 @@ CREATE TABLE audit_logs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Seed users (password: admin123, faculty123, student123)
+-- Seed users (passwords: admin=password, faculty=faculty123, club/student=student123)
 INSERT INTO users (name, email, password, role) VALUES
-('System Admin', 'admin@classreserve.local', '$2y$10$ZyMu5HtSaxpPHOJtaYAHFOx0PoeZ6cqvGJXmq.ejXUYHYnrdRiY02', 'admin'),
+('System Admin', 'admin@classreserve.local', '$2y$10$MIXfJzZ4oezpURAOYPUD/eLD7mx2eZl6f2QgCGUIZ5fBRkhhMwcH2', 'admin'),
 ('Dr. Jane Smith', 'faculty@classreserve.local', '$2y$10$DUDMFsC7kt8bZ.v6rPhryOWrx1YaV1tSLV/12h8JQ0fT0VfKDccMW', 'faculty'),
 ('Coding Club', 'club@classreserve.local', '$2y$10$BqE1DxVRLmyb6UNQx6JdiOyG5qFTScutUqDzXFt7NJSAMIbkJQcg2', 'club'),
 ('Alice Student', 'student@classreserve.local', '$2y$10$BqE1DxVRLmyb6UNQx6JdiOyG5qFTScutUqDzXFt7NJSAMIbkJQcg2', 'student'),
