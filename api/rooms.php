@@ -1,22 +1,132 @@
 <?php
-// GET: list rooms; POST: create room (admin)
-require_once __DIR__ . '/db.php';
+
+require_once __DIR__ . '/bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-if ($method === 'GET') {
-    $stmt = $pdo->query('SELECT * FROM rooms ORDER BY name');
-    $rooms = $stmt->fetchAll();
-    echo json_encode($rooms);
-    exit;
-}
+$action = $_GET['action'] ?? 'list';
 
-if ($method === 'POST') {
-    $input = json_decode(file_get_contents('php://input'), true);
-    $stmt = $pdo->prepare('INSERT INTO rooms (name, capacity, type, building, notes) VALUES (?, ?, ?, ?, ?)');
-    $stmt->execute([$input['name'], $input['capacity'] ?? 0, $input['type'] ?? null, $input['building'] ?? null, $input['notes'] ?? null]);
-    echo json_encode(['ok' => true, 'id' => $pdo->lastInsertId()]);
-    exit;
-}
+switch ($action) {
+    case 'list':
+        $db = getDb();
+        $building = $_GET['building'] ?? '';
+        $type = $_GET['type'] ?? '';
+        $status = $_GET['status'] ?? '';
+        $minCap = (int)($_GET['min_capacity'] ?? 0);
 
-http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+        $sql = 'SELECT * FROM rooms WHERE 1=1';
+        $params = [];
+
+        if ($building) {
+            $sql .= ' AND building = ?';
+            $params[] = $building;
+        }
+        if ($type) {
+            $sql .= ' AND type = ?';
+            $params[] = $type;
+        }
+        if ($status) {
+            $sql .= ' AND status = ?';
+            $params[] = $status;
+        }
+        if ($minCap) {
+            $sql .= ' AND capacity >= ?';
+            $params[] = $minCap;
+        }
+
+        $sql .= ' ORDER BY building, floor, name';
+        $stmt = $db->prepare($sql);
+        $stmt->execute($params);
+        jsonResponse(['rooms' => $stmt->fetchAll()]);
+        break;
+
+    case 'get':
+        $id = (int)($_GET['id'] ?? 0);
+        $stmt = getDb()->prepare('SELECT * FROM rooms WHERE id = ?');
+        $stmt->execute([$id]);
+        $room = $stmt->fetch();
+        if (!$room) jsonError('Room not found', 404);
+        jsonResponse(['room' => $room]);
+        break;
+
+    case 'create':
+        if ($method !== 'POST') jsonError('Method not allowed', 405);
+        $user = requireRole(['admin']);
+        verifyCsrf();
+        $data = getJsonInput();
+
+        $stmt = getDb()->prepare("
+            INSERT INTO rooms (name, building, floor, capacity, type, status, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $data['name'] ?? '',
+            $data['building'] ?? '',
+            (int)($data['floor'] ?? 1),
+            (int)($data['capacity'] ?? 30),
+            $data['type'] ?? 'Lecture',
+            $data['status'] ?? 'available',
+            $data['notes'] ?? null,
+        ]);
+        $roomId = (int)getDb()->lastInsertId();
+        auditLog((int)$user['id'], 'create_room', 'room', $roomId);
+        jsonResponse(['success' => true, 'room_id' => $roomId], 201);
+        break;
+
+    case 'update':
+        if ($method !== 'PUT') jsonError('Method not allowed', 405);
+        $user = requireRole(['admin']);
+        verifyCsrf();
+        $data = getJsonInput();
+        $id = (int)($data['id'] ?? 0);
+
+        $stmt = getDb()->prepare("
+            UPDATE rooms SET name=?, building=?, floor=?, capacity=?, type=?, status=?, notes=?
+            WHERE id=?
+        ");
+        $stmt->execute([
+            $data['name'] ?? '',
+            $data['building'] ?? '',
+            (int)($data['floor'] ?? 1),
+            (int)($data['capacity'] ?? 30),
+            $data['type'] ?? 'Lecture',
+            $data['status'] ?? 'available',
+            $data['notes'] ?? null,
+            $id,
+        ]);
+        auditLog((int)$user['id'], 'update_room', 'room', $id);
+        jsonResponse(['success' => true]);
+        break;
+
+    case 'delete':
+        if ($method !== 'DELETE') jsonError('Method not allowed', 405);
+        $user = requireRole(['admin']);
+        verifyCsrf();
+        $id = (int)($_GET['id'] ?? 0);
+        $force = isset($_GET['force']) && $_GET['force'] === 'true';
+
+        if (!$force) {
+            $stmt = getDb()->prepare("
+                SELECT COUNT(*) FROM bookings 
+                WHERE room_id = ? AND status = 'approved' AND end_datetime > NOW()
+            ");
+            $stmt->execute([$id]);
+            $activeCount = (int)$stmt->fetchColumn();
+
+            if ($activeCount > 0) {
+                jsonResponse([
+                    'success' => false,
+                    'warning' => 'active_bookings',
+                    'error' => "This room has {$activeCount} active approved booking(s). Deleting it will cancel all associated bookings. Do you still want to delete it?"
+                ], 409);
+            }
+        }
+
+        $stmt = getDb()->prepare('DELETE FROM rooms WHERE id = ?');
+        $stmt->execute([$id]);
+        auditLog((int)$user['id'], 'delete_room', 'room', $id);
+        jsonResponse(['success' => true]);
+        break;
+
+    default:
+        jsonError('Unknown action', 404);
+}

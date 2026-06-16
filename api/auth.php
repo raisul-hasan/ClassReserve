@@ -1,57 +1,122 @@
 <?php
-// Basic auth endpoints: register / login (POST)
-require_once __DIR__ . '/db.php';
+
+require_once __DIR__ . '/bootstrap.php';
 
 $method = $_SERVER['REQUEST_METHOD'];
-if ($method !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
-    exit;
-}
+$action = $_GET['action'] ?? '';
 
-$input = json_decode(file_get_contents('php://input'), true);
-if (!isset($input['action'])) {
-    echo json_encode(['error' => 'Missing action']);
-    exit;
-}
+switch ($action) {
+    case 'csrf':
+        jsonResponse(['csrf_token' => getCsrfToken()]);
+        break;
 
-if ($input['action'] === 'register') {
-    $name = $input['name'] ?? '';
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    if (!$email || !$password) {
-        echo json_encode(['error' => 'Email and password required']);
-        exit;
-    }
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $pdo->prepare('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)');
-    try {
-        $stmt->execute([$name, $email, $hash, $input['role'] ?? 'student']);
-        echo json_encode(['ok' => true]);
-    } catch (Exception $e) {
-        http_response_code(400);
-        echo json_encode(['error' => 'Registration failed']);
-    }
-    exit;
-}
+    case 'login':
+        if ($method !== 'POST') jsonError('Method not allowed', 405);
+        $data = getJsonInput();
+        $email = trim($data['email'] ?? '');
+        $password = $data['password'] ?? '';
+        $role = $data['role'] ?? '';
 
-if ($input['action'] === 'login') {
-    $email = $input['email'] ?? '';
-    $password = $input['password'] ?? '';
-    $stmt = $pdo->prepare('SELECT id, password_hash, role, name FROM users WHERE email = ?');
-    $stmt->execute([$email]);
-    $user = $stmt->fetch();
-    if ($user && password_verify($password, $user['password_hash'])) {
-        session_start();
-        $_SESSION['user_id'] = $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['name'] = $user['name'];
-        echo json_encode(['ok' => true, 'user' => ['id' => $user['id'], 'name' => $user['name'], 'role' => $user['role']]]);
-    } else {
-        http_response_code(401);
-        echo json_encode(['error' => 'Invalid credentials']);
-    }
-    exit;
-}
+        if (!$email || !$password) {
+            jsonError('Email and password are required');
+        }
 
-echo json_encode(['error' => 'Unknown action']);
+        $activeSql = tableColumnExists('users', 'is_active') ? ' AND is_active = 1' : '';
+        $stmt = getDb()->prepare('SELECT * FROM users WHERE email = ?' . $activeSql);
+        $stmt->execute([$email]);
+        $user = $stmt->fetch();
+
+        $passwordHash = $user['password'] ?? $user['password_hash'] ?? '';
+        if (!$user || !password_verify($password, $passwordHash)) {
+            jsonError('Invalid credentials', 401);
+        }
+
+        if ($role && $user['role'] !== $role) {
+            jsonError('Role mismatch for this account', 403);
+        }
+
+        unset($user['password'], $user['password_hash']);
+        $_SESSION['user'] = $user;
+        auditLog((int)$user['id'], 'login', 'user', (int)$user['id']);
+
+        jsonResponse([
+            'success' => true,
+            'user' => $user,
+            'csrf_token' => getCsrfToken(),
+        ]);
+        break;
+
+    case 'register':
+        if ($method !== 'POST') jsonError('Method not allowed', 405);
+        verifyCsrf();
+        $data = getJsonInput();
+        $name = trim($data['name'] ?? '');
+        $email = trim($data['email'] ?? '');
+        $password = $data['password'] ?? '';
+        $role = $data['role'] ?? 'student';
+
+        if (!$name || !$email || !$password) {
+            jsonError('Name, email, and password are required');
+        }
+
+        if (!in_array($role, ['student', 'club', 'faculty'], true)) {
+            jsonError('Invalid role for registration');
+        }
+
+        if (strlen($password) < 6) {
+            jsonError('Password must be at least 6 characters');
+        }
+
+        $stmt = getDb()->prepare('SELECT id FROM users WHERE email = ?');
+        $stmt->execute([$email]);
+        if ($stmt->fetch()) {
+            jsonError('Email already registered');
+        }
+
+        $hash = password_hash($password, PASSWORD_DEFAULT);
+        $passwordColumn = tableColumnExists('users', 'password') ? 'password' : 'password_hash';
+        $columns = ['name', 'email', $passwordColumn, 'role'];
+        $values = [$name, $email, $hash, $role];
+
+        if ($role === 'club' && tableColumnExists('users', 'club_name')) {
+            $columns[] = 'club_name';
+            $values[] = $name;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $stmt = getDb()->prepare(
+            'INSERT INTO users (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')'
+        );
+        $stmt->execute($values);
+        $userId = (int)getDb()->lastInsertId();
+
+        auditLog($userId, 'register', 'user', $userId);
+        createNotification($userId, 'success', 'Welcome to ClassReserve', 'Your account has been created successfully.');
+
+        jsonResponse(['success' => true, 'user_id' => $userId], 201);
+        break;
+
+    case 'logout':
+        if ($method !== 'POST') jsonError('Method not allowed', 405);
+        $userId = $_SESSION['user']['id'] ?? null;
+        if ($userId) {
+            auditLog((int)$userId, 'logout', 'user', (int)$userId);
+        }
+        session_destroy();
+        jsonResponse(['success' => true]);
+        break;
+
+    case 'me':
+        if (empty($_SESSION['user'])) {
+            jsonResponse(['authenticated' => false]);
+        }
+        jsonResponse([
+            'authenticated' => true,
+            'user' => $_SESSION['user'],
+            'csrf_token' => getCsrfToken(),
+        ]);
+        break;
+
+    default:
+        jsonError('Unknown action', 404);
+}
