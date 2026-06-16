@@ -8,18 +8,37 @@ $action = $_GET['action'] ?? 'list';
 updateNoShows();
 
 switch ($action) {
+    // ─── LIST ────────────────────────────────────────────────────────────────
     case 'list':
         $user = requireAuth();
         $db = getDb();
 
+        // Admin can filter by status
+        $statusFilter = '';
+        $filterParams = [];
         if ($user['role'] === 'admin') {
-            $stmt = $db->query("
+            $status = $_GET['status'] ?? '';
+            if (in_array($status, ['pending', 'approved', 'rejected', 'cancelled'], true)) {
+                $statusFilter = "AND b.status = ?";
+                $filterParams[] = $status;
+            }
+            $search = trim($_GET['search'] ?? '');
+            $searchSql = '';
+            if ($search !== '') {
+                $searchSql = "AND (b.title LIKE ? OR r.name LIKE ? OR u.name LIKE ?)";
+                $filterParams[] = "%$search%";
+                $filterParams[] = "%$search%";
+                $filterParams[] = "%$search%";
+            }
+            $stmt = $db->prepare("
                 SELECT b.*, r.name AS room_name, r.building, u.name AS user_name, u.role AS user_role
                 FROM bookings b
                 JOIN rooms r ON r.id = b.room_id
                 JOIN users u ON u.id = b.user_id
+                WHERE 1=1 $statusFilter $searchSql
                 ORDER BY b.start_datetime DESC
             ");
+            $stmt->execute($filterParams);
         } else {
             $stmt = $db->prepare("
                 SELECT b.*, r.name AS room_name, r.building, u.name AS user_name, u.role AS user_role
@@ -34,6 +53,7 @@ switch ($action) {
         jsonResponse(['bookings' => $stmt->fetchAll()]);
         break;
 
+    // ─── CALENDAR ────────────────────────────────────────────────────────────
     case 'calendar':
         requireAuth();
         $start = $_GET['start'] ?? date('Y-m-01');
@@ -107,6 +127,7 @@ switch ($action) {
         jsonResponse(['events' => $events]);
         break;
 
+    // ─── SEARCH ──────────────────────────────────────────────────────────────
     case 'search':
         requireAuth();
         $date = $_GET['date'] ?? '';
@@ -159,6 +180,7 @@ switch ($action) {
         jsonResponse(['rooms' => $stmt->fetchAll()]);
         break;
 
+    // ─── CREATE ──────────────────────────────────────────────────────────────
     case 'create':
         if ($method !== 'POST') jsonError('Method not allowed', 405);
         $user = requireAuth();
@@ -219,7 +241,7 @@ switch ($action) {
                 (int)$approver['id'],
                 'pending',
                 'Booking Request Pending',
-                "{$user['name']} requested \"{$title}\" and is waiting for approval.",
+                "{$user['name']} requested \"$title\" and is waiting for approval.",
                 "/public/admin.php?highlight=$bookingId"
             );
         }
@@ -228,6 +250,7 @@ switch ($action) {
         jsonResponse(['success' => true, 'booking_id' => $bookingId, 'checkin_code' => $checkinCode], 201);
         break;
 
+    // ─── UPDATE (admin approve/reject, or admin override) ────────────────────
     case 'update':
         if ($method !== 'PUT') jsonError('Method not allowed', 405);
         $user = requireRole(['admin', 'faculty']);
@@ -235,6 +258,7 @@ switch ($action) {
         $data = getJsonInput();
         $id = (int)($data['id'] ?? 0);
         $status = $data['status'] ?? '';
+        $adminNote = trim($data['admin_note'] ?? '');
 
         if (!$id || !in_array($status, ['approved', 'rejected', 'cancelled'], true)) {
             jsonError('Invalid update parameters');
@@ -245,26 +269,70 @@ switch ($action) {
         $booking = $stmt->fetch();
         if (!$booking) jsonError('Booking not found', 404);
 
-        $stmt = getDb()->prepare('UPDATE bookings SET status = ? WHERE id = ?');
-        $stmt->execute([$status, $id]);
+        // Only pending bookings can be approved/rejected; any status can be cancelled by admin
+        if ($status !== 'cancelled' && $booking['status'] !== 'pending') {
+            jsonError('Only pending bookings can be approved or rejected');
+        }
+
+        getDb()->prepare('UPDATE bookings SET status = ? WHERE id = ?')->execute([$status, $id]);
 
         $notifType = match ($status) {
             'approved' => 'success',
             'rejected' => 'error',
             default    => 'warning',
         };
+        $notifMsg = "Your booking \"{$booking['title']}\" has been $status.";
+        if ($adminNote) {
+            $notifMsg .= " Note: $adminNote";
+        }
         createNotification(
             (int)$booking['user_id'],
             $notifType,
             'Booking ' . ucfirst($status),
-            "Your booking \"{$booking['title']}\" has been $status.",
+            $notifMsg,
             "/public/my-bookings.php?highlight=$id"
         );
-        auditLog((int)$user['id'], "booking_$status", 'booking', $id);
+        auditLog((int)$user['id'], "booking_$status", 'booking', $id,
+            $adminNote ? "Admin note: $adminNote" : null);
 
         jsonResponse(['success' => true]);
         break;
 
+    // ─── ADMIN CANCEL (for invalid/problematic bookings) ─────────────────────
+    case 'admin_cancel':
+        if ($method !== 'POST') jsonError('Method not allowed', 405);
+        $user = requireRole(['admin']);
+        verifyCsrf();
+        $data = getJsonInput();
+        $id = (int)($data['id'] ?? 0);
+        $reason = trim($data['reason'] ?? 'Cancelled by administrator.');
+
+        if (!$id) jsonError('Booking ID is required');
+
+        $stmt = getDb()->prepare('SELECT * FROM bookings WHERE id = ?');
+        $stmt->execute([$id]);
+        $booking = $stmt->fetch();
+        if (!$booking) jsonError('Booking not found', 404);
+
+        if ($booking['status'] === 'cancelled') {
+            jsonError('Booking is already cancelled');
+        }
+
+        getDb()->prepare("UPDATE bookings SET status = 'cancelled' WHERE id = ?")->execute([$id]);
+        createNotification(
+            (int)$booking['user_id'],
+            'warning',
+            'Booking Cancelled by Admin',
+            "Your booking \"{$booking['title']}\" has been cancelled. Reason: $reason",
+            "/public/my-bookings.php?highlight=$id"
+        );
+        auditLog((int)$user['id'], 'admin_cancel_booking', 'booking', $id,
+            "Cancelled by admin. Reason: $reason");
+
+        jsonResponse(['success' => true]);
+        break;
+
+    // ─── CANCEL (user self-cancel) ────────────────────────────────────────────
     case 'cancel':
         if ($method !== 'POST') jsonError('Method not allowed', 405);
         $user = requireAuth();
@@ -300,6 +368,7 @@ switch ($action) {
         jsonResponse(['success' => true]);
         break;
 
+    // ─── CHECKIN ─────────────────────────────────────────────────────────────
     case 'checkin':
         if ($method !== 'POST') jsonError('Method not allowed', 405);
         $user = requireAuth();
@@ -319,12 +388,13 @@ switch ($action) {
             jsonError('Invalid or expired check-in code');
         }
 
-        $stmt = getDb()->prepare('UPDATE bookings SET checked_in_at = NOW(), no_show = 0 WHERE id = ?');
-        $stmt->execute([$booking['id']]);
+        getDb()->prepare('UPDATE bookings SET checked_in_at = NOW(), no_show = 0 WHERE id = ?')
+               ->execute([$booking['id']]);
 
         jsonResponse(['success' => true, 'booking_id' => $booking['id']]);
         break;
 
+    // ─── GET ─────────────────────────────────────────────────────────────────
     case 'get':
         requireAuth();
         $id = (int)($_GET['id'] ?? 0);

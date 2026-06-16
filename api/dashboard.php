@@ -11,7 +11,13 @@ $user = $_SESSION['user'];
 $stats = [];
 
 $stmt = $db->query("SELECT COUNT(*) FROM rooms WHERE status = 'available'");
-$stats['rooms'] = (int)$stmt->fetchColumn();
+$stats['available_rooms'] = (int)$stmt->fetchColumn();
+
+$stmt = $db->query("SELECT COUNT(*) FROM rooms");
+$stats['total_rooms'] = (int)$stmt->fetchColumn();
+
+// Backwards compatibility for existing student/faculty dashboard.php
+$stats['rooms'] = $stats['available_rooms'];
 
 if ($user['role'] === 'admin') {
     $stmt = $db->query("SELECT COUNT(*) FROM bookings");
@@ -20,8 +26,33 @@ if ($user['role'] === 'admin') {
     $stmt = $db->query("SELECT COUNT(*) FROM bookings WHERE status = 'pending'");
     $stats['pending'] = (int)$stmt->fetchColumn();
 
+    $stmt = $db->query("SELECT COUNT(*) FROM bookings WHERE status = 'approved'");
+    $stats['approved'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM bookings WHERE status = 'rejected'");
+    $stats['rejected'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM bookings WHERE status = 'cancelled'");
+    $stats['cancelled'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM users WHERE is_active = 1");
+    $stats['active_users'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM users");
+    $stats['total_users'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM maintenance WHERE start_datetime <= NOW() AND end_datetime >= NOW()");
+    $stats['maintenance_blocks'] = (int)$stmt->fetchColumn();
+
+    // All upcoming/active maintenance
+    $stmt = $db->query("SELECT COUNT(*) FROM maintenance WHERE end_datetime >= NOW()");
+    $stats['upcoming_maintenance'] = (int)$stmt->fetchColumn();
+
     $stmt = $db->query("SELECT COUNT(*) FROM issues WHERE status NOT IN ('Resolved', 'Rejected')");
     $stats['issues'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->query("SELECT COUNT(*) FROM issues");
+    $stats['issues_total'] = (int)$stmt->fetchColumn();
 } else {
     $stmt = $db->prepare("SELECT COUNT(*) FROM bookings WHERE user_id = ?");
     $stmt->execute([$user['id']]);
@@ -37,7 +68,7 @@ if ($user['role'] === 'admin') {
 }
 
 $stmt = $db->prepare("
-    SELECT b.*, r.name AS room_name, u.name AS user_name
+    SELECT b.*, r.name AS room_name, u.name AS user_name, u.role AS user_role
     FROM bookings b
     JOIN rooms r ON r.id = b.room_id
     JOIN users u ON u.id = b.user_id

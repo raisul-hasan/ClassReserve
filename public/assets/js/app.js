@@ -1,5 +1,6 @@
 const ClassReserve = {
     csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '',
+    baseUrl: document.querySelector('meta[name="base-url"]')?.content || '',
     themeStorageKey: 'classreserve.theme',
 
     getStoredTheme() {
@@ -50,7 +51,8 @@ const ClassReserve = {
         if (this.csrfToken && options.method && options.method !== 'GET') {
             headers['X-CSRF-Token'] = this.csrfToken;
         }
-        const res = await fetch(endpoint, { credentials: 'same-origin', ...options, headers });
+        const url = this.baseUrl + endpoint;
+        const res = await fetch(url, { credentials: 'same-origin', ...options, headers });
         const contentType = res.headers.get('content-type') || '';
         const data = contentType.includes('application/json')
             ? await res.json()
@@ -80,7 +82,7 @@ const ClassReserve = {
             logoutBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 await this.api('/api/auth.php?action=logout', { method: 'POST' });
-                window.location.href = '/public/login.php';
+                window.location.href = this.baseUrl + '/public/login.php';
             });
         }
     },
@@ -182,7 +184,7 @@ const ClassReserve = {
             if (!item) return;
             const id = Number(item.dataset.id || 0);
             if (id && item.classList.contains('unread')) await this.markNotificationsRead(id);
-            if (item.dataset.link) window.location.href = item.dataset.link;
+            if (item.dataset.link) window.location.href = ClassReserve.baseUrl + item.dataset.link;
         });
 
         document.addEventListener('click', (e) => {

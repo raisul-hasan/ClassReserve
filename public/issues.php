@@ -1,3 +1,3 @@
 <?php
-header('Location: /public/forum.php');
+header('Location: forum.php');
 exit;

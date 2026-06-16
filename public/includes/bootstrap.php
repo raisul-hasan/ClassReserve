@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 $config = require __DIR__ . '/../../config/database.php';
 
@@ -22,13 +24,22 @@ function getDb(): PDO
 
 function isLoggedIn(): bool
 {
+    if (empty($_SESSION['user']) && !empty($_SESSION['user_id'])) {
+        $stmt = getDb()->prepare('SELECT * FROM users WHERE id = ?');
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $user = $stmt->fetch();
+        if ($user) {
+            unset($user['password'], $user['password_hash']);
+            $_SESSION['user'] = $user;
+        }
+    }
     return !empty($_SESSION['user']);
 }
 
 function requireLogin(): void
 {
     if (!isLoggedIn()) {
-        header('Location: /public/login.php');
+        header('Location: ' . getBaseUrl() . '/public/login.php');
         exit;
     }
 }
@@ -78,6 +89,21 @@ function rolePortal(string $role): string
 
 function navItems(string $role): array
 {
+    if ($role === 'admin') {
+        return [
+            ['href' => '/public/admin.php', 'icon' => 'layout-dashboard', 'label' => 'Dashboard'],
+            ['href' => '/public/admin-approvals.php', 'icon' => 'check-square', 'label' => 'Manage Requests'],
+            ['href' => '/public/admin-rooms.php', 'icon' => 'door-open', 'label' => 'Manage Rooms'],
+            ['href' => '/public/admin-users.php', 'icon' => 'users', 'label' => 'Manage Users'],
+            ['href' => '/public/admin-maintenance.php', 'icon' => 'wrench', 'label' => 'Maintenance'],
+            ['href' => '/public/forum.php', 'icon' => 'messages-square', 'label' => 'Issue Reports'],
+            ['href' => '/public/admin-audit-logs.php', 'icon' => 'list', 'label' => 'Audit Logs'],
+            ['href' => '/public/notices.php', 'icon' => 'bell', 'label' => 'Notifications'],
+            ['href' => '/public/profile.php', 'icon' => 'user', 'label' => 'Profile'],
+            ['href' => '/public/settings.php', 'icon' => 'settings', 'label' => 'Settings'],
+        ];
+    }
+
     if (in_array($role, ['student', 'club'], true)) {
         return [
             ['href' => '/public/dashboard.php', 'icon' => 'layout-dashboard', 'label' => 'Dashboard'],
@@ -99,9 +125,15 @@ function navItems(string $role): array
         ['href' => '/public/forum.php', 'icon' => 'messages-square', 'label' => 'Forum'],
     ];
 
-    if ($role === 'admin') {
-        $common[] = ['href' => '/public/admin.php', 'icon' => 'shield', 'label' => 'Admin Panel'];
-    }
-
     return $common;
+}
+
+function getBaseUrl(): string
+{
+    $script = $_SERVER['SCRIPT_NAME'] ?? '';
+    $publicPos = strpos($script, '/public/');
+    if ($publicPos !== false) {
+        return substr($script, 0, $publicPos);
+    }
+    return '';
 }

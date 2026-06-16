@@ -2,7 +2,7 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 
 if (isLoggedIn()) {
-    header('Location: /public/dashboard.php');
+    header('Location: ' . getBaseUrl() . '/public/dashboard.php');
     exit;
 }
 
@@ -121,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     role: selectedRole
                 })
             });
-            window.location.href = selectedRole === 'admin' ? '/public/admin.php' : '/public/dashboard.php';
+            window.location.href = ClassReserve.baseUrl + (selectedRole === 'admin' ? '/public/admin.php' : '/public/dashboard.php');
         } catch (err) {
             showAlert(err.message);
         }

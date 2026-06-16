@@ -6,10 +6,24 @@ CREATE DATABASE IF NOT EXISTS classreserve
 
 USE classreserve;
 
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS issue_upvotes;
+DROP TABLE IF EXISTS comments;
+DROP TABLE IF EXISTS issues;
+DROP TABLE IF EXISTS maintenance;
+DROP TABLE IF EXISTS bookings;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS users;
+SET FOREIGN_KEY_CHECKS = 1;
+
 CREATE TABLE users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     email VARCHAR(150) NOT NULL UNIQUE,
+    phone VARCHAR(30) NULL,
+    department VARCHAR(100) NULL,
     password VARCHAR(255) NOT NULL,
     role ENUM('admin', 'faculty', 'club', 'student') NOT NULL DEFAULT 'student',
     is_active TINYINT(1) NOT NULL DEFAULT 1,
@@ -89,6 +103,16 @@ CREATE TABLE comments (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE issue_upvotes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    issue_id INT NOT NULL,
+    user_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_issue_user (issue_id, user_id),
+    FOREIGN KEY (issue_id) REFERENCES issues(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE notifications (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -112,13 +136,14 @@ CREATE TABLE audit_logs (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
 );
 
--- Seed users (password: admin123, faculty123, club123, student123)
+-- Seed users (passwords: admin=password, faculty=faculty123, club/student=student123)
 INSERT INTO users (name, email, password, role) VALUES
-('System Admin', 'admin@classreserve.local', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin'),
-('Dr. Jane Smith', 'faculty@classreserve.local', '$2y$10$TKh8H1.PfQx37YgCzwiKb.KjNyWgaHb9cbcoQgdIVFlYg7B77UdFm', 'faculty'),
-('Coding Club', 'club@classreserve.local', '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'club'),
-('Alice Student', 'student@classreserve.local', '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'student'),
-('Bob Student', 'bob@classreserve.local', '$2y$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy', 'student');
+('System Admin', 'admin@classreserve.local', '$2y$10$MIXfJzZ4oezpURAOYPUD/eLD7mx2eZl6f2QgCGUIZ5fBRkhhMwcH2', 'admin'),
+('Dr. Jane Smith', 'faculty@classreserve.local', '$2y$10$DUDMFsC7kt8bZ.v6rPhryOWrx1YaV1tSLV/12h8JQ0fT0VfKDccMW', 'faculty'),
+('Coding Club', 'club@classreserve.local', '$2y$10$BqE1DxVRLmyb6UNQx6JdiOyG5qFTScutUqDzXFt7NJSAMIbkJQcg2', 'club'),
+('Alice Student', 'student@classreserve.local', '$2y$10$BqE1DxVRLmyb6UNQx6JdiOyG5qFTScutUqDzXFt7NJSAMIbkJQcg2', 'student'),
+('Bob Student', 'bob@classreserve.local', '$2y$10$BqE1DxVRLmyb6UNQx6JdiOyG5qFTScutUqDzXFt7NJSAMIbkJQcg2', 'student');
+
 
 INSERT INTO rooms (name, building, floor, capacity, type, status, notes) VALUES
 ('A101', 'Science Block', 1, 40, 'Lecture', 'available', 'Projector, Whiteboard'),
