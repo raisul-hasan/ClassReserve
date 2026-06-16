@@ -7,7 +7,7 @@ $user = currentUser();
 $isAdmin = $user['role'] === 'admin';
 ob_start();
 ?>
-<div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start">
+<div class="page-header forum-page-header">
     <div>
         <h1>Classroom Forum</h1>
         <p>Report issues, discuss maintenance, and upvote concerns</p>
@@ -20,7 +20,7 @@ ob_start();
     <input type="text" id="forum-search" class="form-input" placeholder="Search issues...">
 </div>
 
-<div class="filter-pills" style="margin-bottom:20px">
+<div class="filter-pills forum-filter-pills">
     <button class="filter-pill active" data-category="">All</button>
     <button class="filter-pill" data-category="Equipment">Equipment</button>
     <button class="filter-pill" data-category="Comfort">Comfort</button>
@@ -29,14 +29,8 @@ ob_start();
     <button class="filter-pill" data-category="Other">Other</button>
 </div>
 
-<div id="issues-feed">
+<div id="issues-feed" class="issues-feed">
     <div class="spinner"></div>
-</div>
-
-<div class="drawer-overlay" id="issue-drawer-overlay"></div>
-<div class="drawer" id="issue-drawer">
-    <button class="drawer-close" id="issue-drawer-close"><i data-lucide="x"></i></button>
-    <div id="issue-drawer-content"></div>
 </div>
 
 <div class="modal-overlay" id="report-modal">
@@ -71,16 +65,8 @@ ob_start();
                 </select>
             </div>
             <div class="form-group">
-                <label>Date Noticed</label>
-                <input type="date" id="issue-date" class="form-input" value="<?= date('Y-m-d') ?>">
-            </div>
-            <div class="form-group">
                 <label>Description</label>
                 <textarea id="issue-desc" class="form-textarea" required placeholder="Describe the issue in detail..."></textarea>
-            </div>
-            <div class="form-group">
-                <label>Attachment</label>
-                <input type="file" id="issue-file" class="form-input">
             </div>
             <div style="display:flex;gap:12px;justify-content:flex-end">
                 <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
@@ -94,6 +80,7 @@ ob_start();
 const Forum = {
     category: '',
     isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
+    openIssueId: null,
 
     init() {
         this.loadIssues();
@@ -103,11 +90,10 @@ const Forum = {
                 document.querySelectorAll('[data-category]').forEach(p => p.classList.remove('active'));
                 pill.classList.add('active');
                 this.category = pill.dataset.category;
+                this.openIssueId = null;
                 this.loadIssues();
             });
         });
-        document.getElementById('issue-drawer-close').addEventListener('click', () => this.closeDrawer());
-        document.getElementById('issue-drawer-overlay').addEventListener('click', () => this.closeDrawer());
         document.getElementById('report-form').addEventListener('submit', (e) => this.submitReport(e));
     },
 
@@ -120,14 +106,14 @@ const Forum = {
         try {
             const data = await ClassReserve.api('/api/issues.php?' + params);
             const feed = document.getElementById('issues-feed');
-            if (data.issues.length === 0) {
+            if ((data.issues || []).length === 0) {
                 feed.innerHTML = '<div class="empty-state"><i data-lucide="inbox"></i><p>No issues found</p></div>';
             } else {
                 feed.innerHTML = data.issues.map(i => this.renderCard(i)).join('');
                 feed.querySelectorAll('.issue-card').forEach(card => {
                     card.addEventListener('click', (e) => {
-                        if (e.target.closest('.upvote-btn')) return;
-                        this.openIssue(card.dataset.id);
+                        if (e.target.closest('button, input, textarea, select')) return;
+                        this.toggleIssue(card.dataset.id);
                     });
                 });
                 feed.querySelectorAll('.upvote-btn').forEach(btn => {
@@ -135,106 +121,147 @@ const Forum = {
                 });
             }
             lucide.createIcons();
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            document.getElementById('issues-feed').innerHTML = '<div class="empty-state"><p>Could not load issues</p></div>';
+        }
     },
 
     renderCard(i) {
         const statusClass = { 'Open':'badge-open','Under Review':'badge-review','In Progress':'badge-progress','Resolved':'badge-resolved','Rejected':'badge-rejected' };
         const priClass = { Urgent:'badge-urgent', High:'badge-high', Medium:'badge-medium', Low:'badge-low' };
+        const description = i.description || '';
+        const role = i.user_role ? ` (${ClassReserve.escapeHtml(i.user_role)})` : '';
         return `
-            <div class="issue-card" data-id="${i.id}">
-                <button class="upvote-btn" data-id="${i.id}">
-                    <i data-lucide="chevron-up"></i>
-                    <span class="upvote-count">${i.upvotes}</span>
-                </button>
-                <div class="issue-content">
-                    <div class="issue-title">${i.title}</div>
-                    <div class="issue-meta">
-                        <span class="badge ${statusClass[i.status]||''}">${i.status}</span>
-                        <span class="badge ${priClass[i.priority]||''}">${i.priority}</span>
-                        <span class="badge" style="background:rgba(94,101,123,.15)">${i.category}</span>
+            <article class="issue-card" data-id="${i.id}">
+                <div class="issue-card-main">
+                    <button class="upvote-btn" data-id="${i.id}" type="button" aria-label="Upvote issue">
+                        <i data-lucide="chevron-up"></i>
+                        <span class="upvote-count">${Number(i.upvotes || 0)}</span>
+                    </button>
+                    <div class="issue-content">
+                        <div class="issue-heading-row">
+                            <h2 class="issue-title">${ClassReserve.escapeHtml(i.title)}</h2>
+                            <div class="issue-meta">
+                                <span class="badge ${statusClass[i.status]||''}">${ClassReserve.escapeHtml(i.status)}</span>
+                                <span class="badge ${priClass[i.priority]||''}">${ClassReserve.escapeHtml(i.priority)}</span>
+                                <span class="badge badge-category">${ClassReserve.escapeHtml(i.category)}</span>
+                            </div>
+                        </div>
+                        <div class="issue-snippet">${ClassReserve.escapeHtml(description.substring(0, 180))}${description.length > 180 ? '...' : ''}</div>
+                        <div class="issue-footer">
+                            <span><i data-lucide="map-pin"></i> ${ClassReserve.escapeHtml(i.room_name)}</span>
+                            <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)}${role}</span>
+                            <span><i data-lucide="message-circle"></i> <span class="comment-count">${Number(i.comment_count || 0)}</span> comments</span>
+                        </div>
+                        ${i.admin_response ? `<div class="admin-response-banner"><strong>Admin:</strong> ${ClassReserve.escapeHtml(i.admin_response)}</div>` : ''}
+                        <div class="issue-detail hidden" id="issue-detail-${i.id}"></div>
                     </div>
-                    <div class="issue-snippet">${i.description.substring(0, 150)}${i.description.length > 150 ? '...' : ''}</div>
-                    <div class="issue-footer">
-                        <span><i data-lucide="map-pin"></i> ${i.room_name}</span>
-                        <span><i data-lucide="user"></i> ${i.user_name}</span>
-                        <span><i data-lucide="message-circle"></i> ${i.comment_count} comments</span>
-                    </div>
-                    ${i.admin_response ? `<div class="admin-response-banner"><strong>Admin:</strong> ${i.admin_response}</div>` : ''}
                 </div>
-            </div>`;
+            </article>`;
     },
 
     async upvote(id, btn) {
         try {
             const data = await ClassReserve.api('/api/issues.php?action=upvote', {
                 method: 'POST',
-                body: JSON.stringify({ id: parseInt(id) })
+                body: JSON.stringify({ id: parseInt(id, 10) })
             });
             btn.querySelector('.upvote-count').textContent = data.upvotes;
-        } catch (err) { console.error(err); }
+        } catch (err) { alert(err.message); }
+    },
+
+    async toggleIssue(id) {
+        const detail = document.getElementById(`issue-detail-${id}`);
+        if (!detail) return;
+        if (this.openIssueId === String(id) && !detail.classList.contains('hidden')) {
+            detail.classList.add('hidden');
+            detail.innerHTML = '';
+            this.openIssueId = null;
+            return;
+        }
+        document.querySelectorAll('.issue-detail').forEach(el => {
+            el.classList.add('hidden');
+            el.innerHTML = '';
+        });
+        await this.openIssue(id);
     },
 
     async openIssue(id) {
+        const detail = document.getElementById(`issue-detail-${id}`);
+        if (!detail) return;
+        detail.classList.remove('hidden');
+        detail.innerHTML = '<div class="spinner"></div>';
+        this.openIssueId = String(id);
+
         try {
             const data = await ClassReserve.api('/api/issues.php?action=get&id=' + id);
             const i = data.issue;
             const statusClass = { 'Open':'badge-open','Under Review':'badge-review','In Progress':'badge-progress','Resolved':'badge-resolved','Rejected':'badge-rejected' };
 
-            document.getElementById('issue-drawer-content').innerHTML = `
-                <h2 style="margin-bottom:12px">${i.title}</h2>
-                <div class="issue-meta" style="margin-bottom:16px">
-                    <span class="badge ${statusClass[i.status]||''}">${i.status}</span>
-                    ${ClassReserve.priorityBadge(i.priority)}
-                    <span class="badge" style="background:rgba(94,101,123,.15)">${i.category}</span>
-                </div>
-                <p style="color:var(--cr-slate);line-height:1.6;margin-bottom:16px">${i.description}</p>
-                <div style="font-size:.8rem;color:var(--cr-slate);margin-bottom:20px">
-                    <i data-lucide="map-pin" style="width:14px;display:inline"></i> ${i.room_name} ·
-                    <i data-lucide="user" style="width:14px;display:inline"></i> ${i.user_name}
-                </div>
-                ${i.admin_response ? `<div class="admin-response-banner" style="margin-bottom:20px"><strong>Admin Response:</strong> ${i.admin_response}</div>` : ''}
-                <h4 style="margin-bottom:12px">Comments (${data.comments.length})</h4>
-                <div class="comment-stream" id="comment-stream">
-                    ${data.comments.map(c => `
-                        <div class="comment-item">
-                            <span class="comment-author">${c.user_name}</span>
-                            <span class="comment-time">${ClassReserve.formatDate(c.created_at)}</span>
-                            <div class="comment-text">${c.message}</div>
-                        </div>
-                    `).join('') || '<p style="color:var(--cr-slate);font-size:.85rem">No comments yet</p>'}
-                </div>
-                <div class="comment-composer">
-                    <input type="text" id="new-comment" placeholder="Add a comment...">
-                    <button class="btn btn-primary btn-sm" onclick="Forum.postComment(${i.id})">Post</button>
-                </div>
-                ${this.isAdmin ? `
-                    <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(241,230,210,.08)">
-                        <h4 style="margin-bottom:12px">Admin Response</h4>
-                        <textarea id="admin-response" class="form-textarea" placeholder="Write admin response...">${i.admin_response || ''}</textarea>
-                        <select id="admin-status" class="form-select" style="margin-top:8px">
-                            ${['Open','Under Review','In Progress','Resolved','Rejected'].map(s =>
-                                `<option value="${s}" ${s===i.status?'selected':''}>${s}</option>`
-                            ).join('')}
-                        </select>
-                        <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="Forum.updateStatus(${i.id})">Update Status</button>
+            detail.innerHTML = `
+                <div class="issue-detail-body">
+                    <div class="issue-meta" style="margin-bottom:12px">
+                        <span class="badge ${statusClass[i.status]||''}">${ClassReserve.escapeHtml(i.status)}</span>
+                        ${ClassReserve.priorityBadge(ClassReserve.escapeHtml(i.priority))}
+                        <span class="badge badge-category">${ClassReserve.escapeHtml(i.category)}</span>
                     </div>
-                ` : ''}
+                    <p class="issue-detail-description">${ClassReserve.escapeHtml(i.description)}</p>
+                    <div class="issue-detail-meta">
+                        <span><i data-lucide="map-pin"></i> ${ClassReserve.escapeHtml(i.room_name)}</span>
+                        <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)}${i.user_role ? ` (${ClassReserve.escapeHtml(i.user_role)})` : ''}</span>
+                    </div>
+                    ${i.admin_response ? `<div class="admin-response-banner"><strong>Admin Response:</strong> ${ClassReserve.escapeHtml(i.admin_response)}</div>` : ''}
+                    <div class="issue-comments-head"><h3>Comments (${data.comments.length})</h3></div>
+                    <div class="comment-stream" id="comment-stream-${i.id}">
+                        ${data.comments.map(c => `
+                            <div class="comment-item">
+                                <span class="comment-author">${ClassReserve.escapeHtml(c.user_name)}</span>
+                                <span class="comment-time">${ClassReserve.escapeHtml(ClassReserve.formatDate(c.created_at))}</span>
+                                <div class="comment-text">${ClassReserve.escapeHtml(c.message)}</div>
+                            </div>
+                        `).join('') || '<p class="muted-text">No comments yet</p>'}
+                    </div>
+                    <form class="comment-composer" data-comment-form="${i.id}">
+                        <input type="text" id="new-comment-${i.id}" placeholder="Add a comment..." autocomplete="off">
+                        <button class="btn btn-primary btn-sm" type="submit">Post</button>
+                    </form>
+                    ${this.isAdmin ? `
+                        <div class="admin-inline-tools">
+                            <h3>Admin Response</h3>
+                            <textarea id="admin-response-${i.id}" class="form-textarea" placeholder="Write admin response...">${ClassReserve.escapeHtml(i.admin_response || '')}</textarea>
+                            <select id="admin-status-${i.id}" class="form-select">
+                                ${['Open','Under Review','In Progress','Resolved','Rejected'].map(s =>
+                                    `<option value="${s}" ${s===i.status?'selected':''}>${s}</option>`
+                                ).join('')}
+                            </select>
+                            <button class="btn btn-primary btn-sm" type="button" onclick="Forum.updateStatus(${i.id})">Update Status</button>
+                        </div>
+                    ` : ''}
+                </div>
             `;
-            document.getElementById('issue-drawer').classList.add('open');
-            document.getElementById('issue-drawer-overlay').classList.add('open');
+            detail.querySelector(`[data-comment-form="${i.id}"]`)?.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.postComment(i.id);
+            });
             lucide.createIcons();
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            detail.innerHTML = `<div class="alert alert-error">${ClassReserve.escapeHtml(err.message)}</div>`;
+        }
     },
 
     async postComment(issueId) {
-        const msg = document.getElementById('new-comment').value.trim();
+        const input = document.getElementById(`new-comment-${issueId}`);
+        const msg = input?.value.trim() || '';
         if (!msg) return;
         try {
             await ClassReserve.api('/api/issues.php?action=comment', {
                 method: 'POST',
                 body: JSON.stringify({ issue_id: issueId, message: msg })
             });
+            const card = document.querySelector(`.issue-card[data-id="${issueId}"]`);
+            const count = card?.querySelector('.comment-count');
+            if (count) count.textContent = String(Number(count.textContent || 0) + 1);
             this.openIssue(issueId);
         } catch (err) { alert(err.message); }
     },
@@ -245,11 +272,11 @@ const Forum = {
                 method: 'PUT',
                 body: JSON.stringify({
                     id,
-                    status: document.getElementById('admin-status').value,
-                    admin_response: document.getElementById('admin-response').value
+                    status: document.getElementById(`admin-status-${id}`).value,
+                    admin_response: document.getElementById(`admin-response-${id}`).value
                 })
             });
-            this.closeDrawer();
+            this.openIssueId = null;
             this.loadIssues();
         } catch (err) { alert(err.message); }
     },
@@ -265,22 +292,19 @@ const Forum = {
         fd.append('csrf_token', ClassReserve.csrfToken);
 
         try {
-            const res = await fetch('/api/issues.php?action=create', {
+            const res = await fetch(ClassReserve.baseUrl + '/api/issues.php?action=create', {
                 method: 'POST',
                 headers: { 'X-CSRF-Token': ClassReserve.csrfToken },
+                credentials: 'same-origin',
                 body: fd
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error);
             document.getElementById('report-modal').classList.remove('open');
             document.getElementById('report-form').reset();
+            this.openIssueId = null;
             this.loadIssues();
         } catch (err) { alert(err.message); }
-    },
-
-    closeDrawer() {
-        document.getElementById('issue-drawer').classList.remove('open');
-        document.getElementById('issue-drawer-overlay').classList.remove('open');
     }
 };
 
@@ -292,7 +316,7 @@ function debounce(fn, ms) {
 document.addEventListener('DOMContentLoaded', () => {
     Forum.init();
     const issueId = new URLSearchParams(window.location.search).get('issue');
-    if (issueId) Forum.openIssue(issueId);
+    if (issueId) window.setTimeout(() => Forum.toggleIssue(issueId), 200);
 });
 </script>
 <?php

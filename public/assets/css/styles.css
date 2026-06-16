@@ -1077,7 +1077,15 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 }
 .drawer-close:hover { background: rgba(137,29,26,0.3); color: var(--cr-beige); }
 
-.forum-search { position: relative; margin-bottom: 20px; }
+.forum-page-header,
+.profile-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 18px;
+}
+
+.forum-search { position: relative; margin-bottom: 18px; }
 .forum-search input { padding-left: 40px; }
 .forum-search svg {
     position: absolute;
@@ -1089,18 +1097,26 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     color: var(--cr-slate);
 }
 
+.forum-filter-pills { margin-bottom: 22px; }
+.issues-feed { display: grid; gap: 14px; }
+
 .issue-card {
-    background: rgba(241,230,210,0.05);
-    border: 1px solid rgba(241,230,210,0.08);
-    border-radius: var(--cr-radius);
-    padding: 20px;
-    margin-bottom: 12px;
+    background: linear-gradient(135deg, rgba(137,29,26,0.16), rgba(241,230,210,0.045));
+    border: 1px solid rgba(241,230,210,0.1);
+    border-radius: 12px;
+    padding: 0;
+    margin-bottom: 0;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: border-color 0.2s, transform 0.2s, background 0.2s;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.12);
+}
+.issue-card-main {
     display: flex;
     gap: 16px;
+    padding: 20px;
 }
-.issue-card:hover { border-color: rgba(137,29,26,0.3); transform: translateX(4px); }
+.issue-card:hover { border-color: rgba(137,29,26,0.46); transform: translateY(-1px); }
 
 .upvote-btn {
     display: flex;
@@ -1110,7 +1126,7 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     padding: 8px 12px;
     background: rgba(241,230,210,0.06);
     border: 1px solid rgba(241,230,210,0.1);
-    border-radius: 10px;
+    border-radius: 12px;
     color: var(--cr-slate);
     cursor: pointer;
     transition: all 0.2s;
@@ -1122,7 +1138,21 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 .upvote-count { font-weight: 700; font-size: 0.9rem; }
 
 .issue-content { flex: 1; min-width: 0; }
-.issue-title { font-weight: 700; font-size: 1rem; margin-bottom: 4px; color: var(--cr-beige); }
+.issue-heading-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 8px;
+}
+.issue-title {
+    font-family: var(--font-body);
+    font-weight: 800;
+    font-size: 1.02rem;
+    margin: 0;
+    color: var(--cr-beige);
+    letter-spacing: 0;
+}
 .issue-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 
 .badge {
@@ -1142,10 +1172,54 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 .badge-high { background: rgba(192,80,40,0.2); color: #e08060; }
 .badge-medium { background: rgba(168,120,40,0.2); color: #f0c070; }
 .badge-low { background: rgba(94,101,123,0.2); color: #a8b0c8; }
+.badge-category { background: rgba(94,101,123,.16); color: #c7cede; border-color: rgba(94,101,123,.28); }
 
 .issue-snippet { font-size: 0.85rem; color: var(--cr-slate); line-height: 1.5; }
-.issue-footer { display: flex; gap: 16px; margin-top: 10px; font-size: 0.75rem; color: var(--cr-slate); }
+.issue-footer { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 0.75rem; color: var(--cr-slate); }
 .issue-footer span { display: inline-flex; align-items: center; gap: 4px; }
+
+.issue-detail {
+    margin-top: 18px;
+    border-top: 1px solid rgba(241,230,210,0.08);
+    cursor: default;
+}
+.issue-detail-body { padding-top: 18px; }
+.issue-detail-description {
+    color: rgba(241,230,210,0.82);
+    line-height: 1.65;
+    margin: 0 0 14px;
+    white-space: pre-wrap;
+}
+.issue-detail-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    color: var(--cr-slate);
+    font-size: 0.78rem;
+    margin-bottom: 16px;
+}
+.issue-detail-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.issue-detail-meta svg,
+.issue-footer svg { width: 14px; height: 14px; }
+.issue-comments-head h3,
+.admin-inline-tools h3 {
+    margin: 18px 0 10px;
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    letter-spacing: 0;
+    color: var(--cr-beige);
+}
+.admin-inline-tools {
+    display: grid;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(241,230,210,0.08);
+}
 
 .admin-response-banner {
     background: rgba(137,29,26,0.1);
@@ -1188,7 +1262,7 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 .modal-overlay.open .modal { transform: scale(1) translateY(0); }
 .modal h2 { margin: 0 0 20px; font-size: 1.4rem; }
 
-.comment-stream { margin: 20px 0; max-height: 300px; overflow-y: auto; }
+.comment-stream { margin: 12px 0; max-height: 300px; overflow-y: auto; }
 .comment-item {
     padding: 12px;
     background: rgba(241,230,210,0.04);
@@ -1569,6 +1643,18 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 }
 .comment-composer input:focus { border-color: var(--cr-maroon); }
 
+.profile-password-section {
+    margin: 20px 0;
+    padding-top: 18px;
+    border-top: 1px solid rgba(241,230,210,0.08);
+}
+.profile-password-section h3 {
+    margin: 0 0 4px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    letter-spacing: 0;
+}
+
 .activity-list { list-style: none; padding: 0; margin: 0; }
 .activity-item {
     display: flex;
@@ -1863,5 +1949,18 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     }
     .topbar {
         padding: 12px 16px;
+    }
+    .forum-page-header,
+    .profile-page-header,
+    .issue-heading-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .issue-card-main {
+        padding: 16px;
+        gap: 12px;
+    }
+    .issue-footer {
+        gap: 10px;
     }
 }

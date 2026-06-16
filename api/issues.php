@@ -13,7 +13,7 @@ switch ($action) {
         $search = $_GET['search'] ?? '';
 
         $sql = "
-            SELECT i.*, u.name AS user_name,
+            SELECT i.*, u.name AS user_name, u.role AS user_role,
                    (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id) AS comment_count
             FROM issues i
             JOIN users u ON u.id = i.user_id
@@ -46,7 +46,8 @@ switch ($action) {
     case 'get':
         $id = (int)($_GET['id'] ?? 0);
         $stmt = getDb()->prepare("
-            SELECT i.*, u.name AS user_name
+            SELECT i.*, u.name AS user_name, u.role AS user_role,
+                   (SELECT COUNT(*) FROM comments c WHERE c.issue_id = i.id) AS comment_count
             FROM issues i
             JOIN users u ON u.id = i.user_id
             WHERE i.id = ?
@@ -100,8 +101,12 @@ switch ($action) {
         requireAuth();
         $data = getJsonInput();
         $id = (int)($data['id'] ?? 0);
+        if (!$id) jsonError('Issue ID is required');
 
-        getDb()->prepare('UPDATE issues SET upvotes = upvotes + 1 WHERE id = ?')->execute([$id]);
+        $stmt = getDb()->prepare('UPDATE issues SET upvotes = upvotes + 1 WHERE id = ?');
+        $stmt->execute([$id]);
+        if ($stmt->rowCount() === 0) jsonError('Issue not found', 404);
+
         $stmt = getDb()->prepare('SELECT upvotes FROM issues WHERE id = ?');
         $stmt->execute([$id]);
         jsonResponse(['success' => true, 'upvotes' => (int)$stmt->fetchColumn()]);
@@ -116,6 +121,10 @@ switch ($action) {
         $message = trim($data['message'] ?? '');
 
         if (!$issueId || !$message) jsonError('Issue ID and message required');
+
+        $stmt = getDb()->prepare('SELECT id FROM issues WHERE id = ?');
+        $stmt->execute([$issueId]);
+        if (!$stmt->fetch()) jsonError('Issue not found', 404);
 
         $stmt = getDb()->prepare('INSERT INTO comments (issue_id, user_id, message) VALUES (?, ?, ?)');
         $stmt->execute([$issueId, $user['id'], $message]);
