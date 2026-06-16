@@ -55,9 +55,14 @@ $hideNav = $hideNav ?? false;
         </button>
     </div>
 
+    <?php $currentPath = rtrim(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: '', '/') ?: '/'; ?>
     <nav class="sidebar-nav">
         <?php foreach (navItems($user['role']) as $item): ?>
-            <?php $active = str_contains($_SERVER['REQUEST_URI'], basename($item['href'])) ? 'active' : ''; ?>
+            <?php
+                $itemPath = rtrim(parse_url($item['href'], PHP_URL_PATH) ?: $item['href'], '/') ?: '/';
+                $matchPaths = array_map(static fn ($path) => rtrim(parse_url($path, PHP_URL_PATH) ?: $path, '/') ?: '/', $item['matches'] ?? []);
+                $active = $currentPath === $itemPath || $currentPath === $itemPath . '.php' || in_array($currentPath, $matchPaths, true) ? 'active' : '';
+            ?>
             <a href="<?= $item['href'] ?>" class="nav-item <?= $active ?>">
                 <i data-lucide="<?= $item['icon'] ?>"></i>
                 <span><?= sanitize($item['label']) ?></span>

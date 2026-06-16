@@ -7,6 +7,31 @@ $action = $_GET['action'] ?? 'list';
 
 updateNoShows();
 
+function bookingColumnNames(PDO $db): array
+{
+    static $columns = null;
+    if ($columns !== null) {
+        return $columns;
+    }
+
+    $columns = [];
+    foreach ($db->query('SHOW COLUMNS FROM bookings') as $column) {
+        $columns[$column['Field']] = true;
+    }
+
+    return $columns;
+}
+
+function missingFacultyAcademicBookingColumns(PDO $db): array
+{
+    $columns = bookingColumnNames($db);
+    $required = ['course_code', 'section', 'batch', 'department'];
+
+    return array_values(array_filter($required, static function (string $column) use ($columns): bool {
+        return empty($columns[$column]);
+    }));
+}
+
 switch ($action) {
     case 'list':
         $user = requireAuth();
@@ -72,6 +97,8 @@ switch ($action) {
                     'end' => $b['end_datetime'],
                     'status' => $b['status'],
                     'role' => $b['user_role'],
+                    'user_id' => (int)$b['user_id'],
+                    'purpose' => $b['purpose'] ?? '',
                     'room_name' => $b['room_name'],
                     'building' => $b['building'],
                     'user_name' => $b['user_name'],
@@ -122,14 +149,17 @@ switch ($action) {
 
         $start = "$date $startTime:00";
         $end = "$date $endTime:00";
+        $startTimestamp = strtotime($start);
+        $endTimestamp = strtotime($end);
 
-        if (strtotime($end) <= strtotime($start)) {
-            jsonError('End time must be after start time');
+        if ($startTimestamp === false || $endTimestamp === false || $endTimestamp <= $startTimestamp) {
+            jsonError('Invalid time');
         }
 
         $building = trim($_GET['building'] ?? '');
         $roomType = trim($_GET['type'] ?? '');
-        $requestPriority = rolePriority($user['role']);
+        $start = date('Y-m-d H:i:s', $startTimestamp);
+        $end = date('Y-m-d H:i:s', $endTimestamp);
 
         $db = getDb();
         $sql = "SELECT r.* FROM rooms r WHERE r.status = 'available' AND r.capacity BETWEEN ? AND ?";
@@ -146,7 +176,7 @@ switch ($action) {
 
         $sql .= " AND r.id NOT IN (
                   SELECT room_id FROM bookings
-                  WHERE (status = 'approved' OR (status = 'pending' AND priority >= ?))
+                  WHERE status IN ('pending', 'approved')
                     AND start_datetime < ? AND end_datetime > ?
               )
               AND r.id NOT IN (
@@ -155,7 +185,6 @@ switch ($action) {
               )
             ORDER BY r.capacity ASC";
 
-        $params[] = $requestPriority;
         $params[] = $end;
         $params[] = $start;
         $params[] = $end;
@@ -178,17 +207,74 @@ switch ($action) {
         $endDatetime = $_POST['end_datetime'] ?? '';
         $attendees = (int)($_POST['attendees'] ?? 1);
         $purpose = trim($_POST['purpose'] ?? '');
+        $courseCode = trim($_POST['course_code'] ?? '');
+        $section = trim($_POST['section'] ?? '');
+        $batch = trim($_POST['batch'] ?? '');
+        $department = trim($_POST['department'] ?? '');
+        $facultyClassTypes = [
+            'Regular Class',
+            'Extra Class',
+            'Makeup Class',
+            'Lab Class',
+            'Exam',
+            'Quiz',
+            'Presentation',
+            'Viva',
+            'Seminar',
+            'Workshop',
+            'Faculty Meeting',
+            'Department Meeting',
+            'Consultation Hour',
+            'Other',
+        ];
 
         if (!$title || !$roomId || !$startDatetime || !$endDatetime || !$purpose) {
             jsonError('Missing required fields');
         }
 
         if ($attendees <= 0) {
-            jsonError('Capacity/attendees must be positive');
+            jsonError('Expected participants must be positive');
         }
 
-        if (strtotime($endDatetime) <= strtotime($startDatetime)) {
-            jsonError('End time must be after start time');
+        $startTimestamp = strtotime($startDatetime);
+        $endTimestamp = strtotime($endDatetime);
+        if ($startTimestamp === false || $endTimestamp === false || $endTimestamp <= $startTimestamp) {
+            jsonError('Invalid time');
+        }
+        $startDatetime = date('Y-m-d H:i:s', $startTimestamp);
+        $endDatetime = date('Y-m-d H:i:s', $endTimestamp);
+
+        if ($user['role'] === 'faculty' && $description === '') {
+            jsonError('Description is required');
+        }
+
+        if ($user['role'] === 'faculty' && !in_array($purpose, $facultyClassTypes, true)) {
+            jsonError('Invalid class type');
+        }
+
+        if ($user['role'] === 'faculty' && (!$courseCode || !$section || !$batch || !$department)) {
+            jsonError('Course code, section, batch, and department are required');
+        }
+
+        $db = getDb();
+        $roomStmt = $db->prepare('SELECT id, capacity, status FROM rooms WHERE id = ?');
+        $roomStmt->execute([$roomId]);
+        $room = $roomStmt->fetch();
+
+        if (!$room) {
+            jsonError('Room not found', 404);
+        }
+
+        if ($room['status'] === 'maintenance') {
+            jsonError('Room under maintenance');
+        }
+
+        if ($room['status'] !== 'available') {
+            jsonError('Room is not available for booking');
+        }
+
+        if ((int)$room['capacity'] < $attendees) {
+            jsonError('Capacity not enough');
         }
 
         $priority = rolePriority($user['role']);
@@ -196,6 +282,21 @@ switch ($action) {
         $conflict = checkBookingConflict($roomId, $startDatetime, $endDatetime, $priority);
         if ($conflict) {
             jsonError($conflict);
+        }
+
+        $facultyAcademicValues = [];
+        if ($user['role'] === 'faculty') {
+            $missingColumns = missingFacultyAcademicBookingColumns($db);
+            if ($missingColumns) {
+                jsonError('Database migration required for faculty academic fields: ' . implode(', ', $missingColumns), 500);
+            }
+
+            $facultyAcademicValues = [
+                'course_code' => $courseCode,
+                'section' => $section,
+                'batch' => $batch,
+                'department' => $department,
+            ];
         }
 
         $uploadedPath = null;
@@ -213,17 +314,42 @@ switch ($action) {
 
         $checkinCode = generateCheckinCode();
 
-        $stmt = getDb()->prepare("
-            INSERT INTO bookings (user_id, room_id, start_datetime, end_datetime, status, priority, title, description, uploaded_path, checkin_code, attendees, purpose)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ");
-        $stmt->execute([
+        $insertColumns = [
+            'user_id',
+            'room_id',
+            'start_datetime',
+            'end_datetime',
+            'status',
+            'priority',
+            'title',
+            'description',
+            'uploaded_path',
+            'checkin_code',
+            'attendees',
+            'purpose',
+        ];
+        $insertValues = [
             $user['id'], $roomId, $startDatetime, $endDatetime,
             $status, $priority, $title, $description, $uploadedPath, $checkinCode,
             $attendees, $purpose
-        ]);
+        ];
 
-        $bookingId = (int)getDb()->lastInsertId();
+        foreach ($facultyAcademicValues as $column => $value) {
+            $insertColumns[] = $column;
+            $insertValues[] = $value;
+        }
+
+        $quotedColumns = array_map(static function (string $column): string {
+            return "`$column`";
+        }, $insertColumns);
+        $placeholders = array_fill(0, count($insertColumns), '?');
+
+        $stmt = $db->prepare(
+            'INSERT INTO bookings (' . implode(', ', $quotedColumns) . ') VALUES (' . implode(', ', $placeholders) . ')'
+        );
+        $stmt->execute($insertValues);
+
+        $bookingId = (int)$db->lastInsertId();
         $userNotificationType = $status === 'approved' ? 'success' : 'pending';
         $userNotificationTitle = $status === 'approved' ? 'Booking Approved' : 'Booking Submitted';
         $userNotificationMessage = $status === 'approved'
@@ -308,10 +434,25 @@ switch ($action) {
                 }
             }
 
-            $stmt = getDb()->prepare(
-                'UPDATE bookings SET status = ?, reviewed_by = ?, review_note = ?, reviewed_at = NOW() WHERE id = ?'
-            );
-            $stmt->execute([$status, $user['id'], $note ?: null, $id]);
+            $columns = bookingColumnNames(getDb());
+            $setParts = ['status = ?'];
+            $values = [$status];
+
+            if (!empty($columns['reviewed_by'])) {
+                $setParts[] = 'reviewed_by = ?';
+                $values[] = $user['id'];
+            }
+            if (!empty($columns['review_note'])) {
+                $setParts[] = 'review_note = ?';
+                $values[] = $note ?: null;
+            }
+            if (!empty($columns['reviewed_at'])) {
+                $setParts[] = 'reviewed_at = NOW()';
+            }
+
+            $values[] = $id;
+            $stmt = getDb()->prepare('UPDATE bookings SET ' . implode(', ', $setParts) . ' WHERE id = ?');
+            $stmt->execute($values);
         } else {
             // cancellation flow for request owner or admin
             $stmt = getDb()->prepare('UPDATE bookings SET status = ? WHERE id = ?');

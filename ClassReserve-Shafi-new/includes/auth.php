@@ -122,6 +122,16 @@ function formatDateTime(string $dt): string
     return date('M j, Y g:i A', strtotime($dt));
 }
 
+function normalizeDateTimeForDatabase(string $value): ?string
+{
+    $timestamp = strtotime($value);
+    if ($timestamp === false) {
+        return null;
+    }
+
+    return date('Y-m-d H:i:s', $timestamp);
+}
+
 function timesOverlap(string $start1, string $end1, string $start2, string $end2): bool
 {
     return $start1 < $end2 && $end1 > $start2;
@@ -140,12 +150,23 @@ function checkRoomAvailability(
 ): array {
     $db = getDb();
     $conflicts = [];
+    $normalizedStart = normalizeDateTimeForDatabase($startTime);
+    $normalizedEnd = normalizeDateTimeForDatabase($endTime);
+
+    if ($normalizedStart === null || $normalizedEnd === null || $normalizedStart >= $normalizedEnd) {
+        return [
+            'available' => false,
+            'conflicts' => [[
+                'type' => 'invalid_time',
+            ]],
+        ];
+    }
 
     $stmt = $db->prepare(
         'SELECT * FROM maintenance_blocks
          WHERE room_id = ? AND start_time < ? AND end_time > ?'
     );
-    $stmt->execute([$roomId, $endTime, $startTime]);
+    $stmt->execute([$roomId, $normalizedEnd, $normalizedStart]);
     foreach ($stmt->fetchAll() as $block) {
         $conflicts[] = [
             'type'   => 'maintenance',
@@ -161,7 +182,7 @@ function checkRoomAvailability(
             WHERE b.room_id = ?
               AND b.status IN ("approved", "pending")
               AND b.start_time < ? AND b.end_time > ?';
-    $params = [$roomId, $endTime, $startTime];
+    $params = [$roomId, $normalizedEnd, $normalizedStart];
 
     if ($excludeBookingId) {
         $sql .= ' AND b.id != ?';
@@ -172,19 +193,17 @@ function checkRoomAvailability(
     $stmt->execute($params);
 
     foreach ($stmt->fetchAll() as $booking) {
-        if ((int) $booking['priority'] >= $requestPriority) {
-            $conflicts[] = [
-                'type'     => 'booking',
-                'id'       => $booking['id'],
-                'title'    => $booking['title'],
-                'user'     => $booking['user_name'],
-                'role'     => $booking['user_role'],
-                'priority' => $booking['priority'],
-                'status'   => $booking['status'],
-                'start'    => $booking['start_time'],
-                'end'      => $booking['end_time'],
-            ];
-        }
+        $conflicts[] = [
+            'type'     => 'booking',
+            'id'       => $booking['id'],
+            'title'    => $booking['title'],
+            'user'     => $booking['user_name'],
+            'role'     => $booking['user_role'],
+            'priority' => $booking['priority'],
+            'status'   => $booking['status'],
+            'start'    => $booking['start_time'],
+            'end'      => $booking['end_time'],
+        ];
     }
 
     return [
@@ -200,6 +219,13 @@ function searchAvailableRooms(
     int $requestPriority
 ): array {
     $db = getDb();
+    $normalizedStart = normalizeDateTimeForDatabase($startTime);
+    $normalizedEnd = normalizeDateTimeForDatabase($endTime);
+
+    if ($normalizedStart === null || $normalizedEnd === null || $normalizedStart >= $normalizedEnd) {
+        return [];
+    }
+
     $stmt = $db->prepare(
         'SELECT * FROM rooms WHERE status = "available" AND capacity >= ? ORDER BY capacity, name'
     );
@@ -208,7 +234,7 @@ function searchAvailableRooms(
     $available = [];
 
     foreach ($rooms as $room) {
-        $check = checkRoomAvailability((int) $room['id'], $startTime, $endTime, $requestPriority);
+        $check = checkRoomAvailability((int) $room['id'], $normalizedStart, $normalizedEnd, $requestPriority);
         if ($check['available']) {
             $room['conflicts'] = [];
             $available[] = $room;
