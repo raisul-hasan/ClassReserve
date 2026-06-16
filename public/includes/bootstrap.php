@@ -2,7 +2,9 @@
 
 declare(strict_types=1);
 
-session_start();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 $config = require __DIR__ . '/../../config/database.php';
 
@@ -22,6 +24,15 @@ function getDb(): PDO
 
 function isLoggedIn(): bool
 {
+    if (empty($_SESSION['user']) && !empty($_SESSION['user_id'])) {
+        $stmt = getDb()->prepare('SELECT * FROM users WHERE id = ?');
+        $stmt->execute([(int)$_SESSION['user_id']]);
+        $user = $stmt->fetch();
+        if ($user) {
+            unset($user['password'], $user['password_hash']);
+            $_SESSION['user'] = $user;
+        }
+    }
     return !empty($_SESSION['user']);
 }
 
@@ -126,4 +137,3 @@ function getBaseUrl(): string
     }
     return '';
 }
-

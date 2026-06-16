@@ -18,56 +18,60 @@ switch ($action) {
         $limit        = max(1, min(500, (int)($_GET['limit'] ?? 200)));
         $offset       = max(0, (int)($_GET['offset'] ?? 0));
 
+        $whereSql = ' WHERE 1=1';
+        $params = [];
+
         $sql = "
             SELECT a.*, u.name AS user_name, u.role AS user_role
             FROM audit_logs a
             LEFT JOIN users u ON u.id = a.user_id
-            WHERE 1=1
+            $whereSql
         ";
-        $params = [];
 
         if ($actionFilter !== '') {
-            $sql .= ' AND a.action LIKE ?';
+            $whereSql .= ' AND a.action LIKE ?';
             $params[] = "%$actionFilter%";
         }
 
         if ($userFilter !== '') {
-            $sql .= ' AND u.name LIKE ?';
+            $whereSql .= ' AND u.name LIKE ?';
             $params[] = "%$userFilter%";
         }
 
         if ($dateFrom !== '') {
-            $sql .= ' AND a.created_at >= ?';
+            $whereSql .= ' AND a.created_at >= ?';
             $params[] = $dateFrom . ' 00:00:00';
         }
 
         if ($dateTo !== '') {
-            $sql .= ' AND a.created_at <= ?';
+            $whereSql .= ' AND a.created_at <= ?';
             $params[] = $dateTo . ' 23:59:59';
         }
 
+        $sql = "
+            SELECT a.*, u.name AS user_name, u.role AS user_role
+            FROM audit_logs a
+            LEFT JOIN users u ON u.id = a.user_id
+            $whereSql
+        ";
         $sql .= ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?';
-        $params[] = $limit;
-        $params[] = $offset;
-
         $stmt = $db->prepare($sql);
-        $stmt->execute($params);
+        foreach ($params as $index => $value) {
+            $stmt->bindValue($index + 1, $value);
+        }
+        $stmt->bindValue(count($params) + 1, $limit, PDO::PARAM_INT);
+        $stmt->bindValue(count($params) + 2, $offset, PDO::PARAM_INT);
+        $stmt->execute();
         $logs = $stmt->fetchAll();
 
-        // Total count for pagination
         $countSql = "
             SELECT COUNT(*)
             FROM audit_logs a
             LEFT JOIN users u ON u.id = a.user_id
-            WHERE 1=1
+            $whereSql
         ";
-        $countParams = array_slice($params, 0, count($params) - 2); // remove limit/offset
-        $countStmt = $db->prepare(str_replace(
-            'ORDER BY a.created_at DESC LIMIT ? OFFSET ?',
-            '',
-            $sql
-        ));
-        $countStmt->execute($countParams);
+        $countStmt = $db->prepare($countSql);
+        $countStmt->execute($params);
         $total = (int)$countStmt->fetchColumn();
 
         jsonResponse(['logs' => $logs, 'total' => $total, 'limit' => $limit, 'offset' => $offset]);

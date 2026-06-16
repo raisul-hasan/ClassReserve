@@ -29,8 +29,16 @@ ob_start();
     <button class="filter-pill" data-category="Other">Other</button>
 </div>
 
-<div id="issues-feed" class="issues-feed">
-    <div class="spinner"></div>
+<div class="forum-layout">
+    <div id="issues-feed" class="issues-feed">
+        <div class="spinner"></div>
+    </div>
+    <aside id="issue-detail-panel" class="forum-detail-panel">
+        <div class="forum-detail-empty">
+            <i data-lucide="message-square"></i>
+            <p>Select an issue to view details and comments.</p>
+        </div>
+    </aside>
 </div>
 
 <div class="modal-overlay" id="report-modal">
@@ -80,7 +88,7 @@ ob_start();
 const Forum = {
     category: '',
     isAdmin: <?= $isAdmin ? 'true' : 'false' ?>,
-    openIssueId: null,
+    selectedIssueId: null,
 
     init() {
         this.loadIssues();
@@ -90,7 +98,7 @@ const Forum = {
                 document.querySelectorAll('[data-category]').forEach(p => p.classList.remove('active'));
                 pill.classList.add('active');
                 this.category = pill.dataset.category;
-                this.openIssueId = null;
+                this.selectedIssueId = null;
                 this.loadIssues();
             });
         });
@@ -113,7 +121,7 @@ const Forum = {
                 feed.querySelectorAll('.issue-card').forEach(card => {
                     card.addEventListener('click', (e) => {
                         if (e.target.closest('button, input, textarea, select')) return;
-                        this.toggleIssue(card.dataset.id);
+                        this.openIssue(card.dataset.id);
                     });
                 });
                 feed.querySelectorAll('.upvote-btn').forEach(btn => {
@@ -131,7 +139,9 @@ const Forum = {
         const statusClass = { 'Open':'badge-open','Under Review':'badge-review','In Progress':'badge-progress','Resolved':'badge-resolved','Rejected':'badge-rejected' };
         const priClass = { Urgent:'badge-urgent', High:'badge-high', Medium:'badge-medium', Low:'badge-low' };
         const description = i.description || '';
-        const role = i.user_role ? ` (${ClassReserve.escapeHtml(i.user_role)})` : '';
+        const roleClass = i.user_role ? `role-${ClassReserve.escapeHtml(i.user_role)}` : '';
+        const roleBadge = i.user_role ? `<span class="role-badge ${roleClass}">${ClassReserve.escapeHtml(i.user_role)}</span>` : '';
+        const created = i.created_at ? `${ClassReserve.formatDate(i.created_at)} ${ClassReserve.formatTime(i.created_at)}` : '';
         return `
             <article class="issue-card" data-id="${i.id}">
                 <div class="issue-card-main">
@@ -151,11 +161,11 @@ const Forum = {
                         <div class="issue-snippet">${ClassReserve.escapeHtml(description.substring(0, 180))}${description.length > 180 ? '...' : ''}</div>
                         <div class="issue-footer">
                             <span><i data-lucide="map-pin"></i> ${ClassReserve.escapeHtml(i.room_name)}</span>
-                            <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)}${role}</span>
+                            <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)} ${roleBadge}</span>
+                            <span><i data-lucide="clock"></i> ${ClassReserve.escapeHtml(created)}</span>
                             <span><i data-lucide="message-circle"></i> <span class="comment-count">${Number(i.comment_count || 0)}</span> comments</span>
                         </div>
                         ${i.admin_response ? `<div class="admin-response-banner"><strong>Admin:</strong> ${ClassReserve.escapeHtml(i.admin_response)}</div>` : ''}
-                        <div class="issue-detail hidden" id="issue-detail-${i.id}"></div>
                     </div>
                 </div>
             </article>`;
@@ -171,36 +181,41 @@ const Forum = {
         } catch (err) { alert(err.message); }
     },
 
-    async toggleIssue(id) {
-        const detail = document.getElementById(`issue-detail-${id}`);
-        if (!detail) return;
-        if (this.openIssueId === String(id) && !detail.classList.contains('hidden')) {
-            detail.classList.add('hidden');
-            detail.innerHTML = '';
-            this.openIssueId = null;
-            return;
-        }
-        document.querySelectorAll('.issue-detail').forEach(el => {
-            el.classList.add('hidden');
-            el.innerHTML = '';
-        });
-        await this.openIssue(id);
-    },
-
     async openIssue(id) {
-        const detail = document.getElementById(`issue-detail-${id}`);
+        const detail = document.getElementById('issue-detail-panel');
         if (!detail) return;
-        detail.classList.remove('hidden');
         detail.innerHTML = '<div class="spinner"></div>';
-        this.openIssueId = String(id);
+        this.selectedIssueId = String(id);
+        document.querySelectorAll('.issue-card').forEach(card => {
+            card.classList.toggle('selected', card.dataset.id === String(id));
+        });
 
         try {
             const data = await ClassReserve.api('/api/issues.php?action=get&id=' + id);
             const i = data.issue;
             const statusClass = { 'Open':'badge-open','Under Review':'badge-review','In Progress':'badge-progress','Resolved':'badge-resolved','Rejected':'badge-rejected' };
+            const created = i.created_at ? `${ClassReserve.formatDate(i.created_at)} ${ClassReserve.formatTime(i.created_at)}` : '';
+            const roleClass = i.user_role ? `role-${ClassReserve.escapeHtml(i.user_role)}` : '';
+            const roleBadge = i.user_role ? `<span class="role-badge ${roleClass}">${ClassReserve.escapeHtml(i.user_role)}</span>` : '';
+            const relatedBooking = i.related_booking_title ? `
+                <div class="related-booking-card">
+                    <strong><i data-lucide="calendar-days"></i> Related Booking</strong>
+                    <span>${ClassReserve.escapeHtml(i.related_booking_title)}</span>
+                    ${i.related_booking_room ? `<small>${ClassReserve.escapeHtml(i.related_booking_room)}</small>` : ''}
+                </div>
+            ` : '';
+            const warning = i.conflict_warning ? `
+                <div class="conflict-warning-card">
+                    <strong><i data-lucide="triangle-alert"></i> Conflict Warning</strong>
+                    <span>${ClassReserve.escapeHtml(i.conflict_warning)}</span>
+                </div>
+            ` : '';
 
             detail.innerHTML = `
                 <div class="issue-detail-body">
+                    <div class="forum-detail-head">
+                        <h2>${ClassReserve.escapeHtml(i.title)}</h2>
+                    </div>
                     <div class="issue-meta" style="margin-bottom:12px">
                         <span class="badge ${statusClass[i.status]||''}">${ClassReserve.escapeHtml(i.status)}</span>
                         ${ClassReserve.priorityBadge(ClassReserve.escapeHtml(i.priority))}
@@ -209,9 +224,13 @@ const Forum = {
                     <p class="issue-detail-description">${ClassReserve.escapeHtml(i.description)}</p>
                     <div class="issue-detail-meta">
                         <span><i data-lucide="map-pin"></i> ${ClassReserve.escapeHtml(i.room_name)}</span>
-                        <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)}${i.user_role ? ` (${ClassReserve.escapeHtml(i.user_role)})` : ''}</span>
+                        <span><i data-lucide="user"></i> ${ClassReserve.escapeHtml(i.user_name)} ${roleBadge}</span>
+                        <span><i data-lucide="clock"></i> ${ClassReserve.escapeHtml(created)}</span>
+                        <span><i data-lucide="chevron-up"></i> ${Number(i.upvotes || 0)} upvotes</span>
                     </div>
                     ${i.admin_response ? `<div class="admin-response-banner"><strong>Admin Response:</strong> ${ClassReserve.escapeHtml(i.admin_response)}</div>` : ''}
+                    ${relatedBooking}
+                    ${warning}
                     <div class="issue-comments-head"><h3>Comments (${data.comments.length})</h3></div>
                     <div class="comment-stream" id="comment-stream-${i.id}">
                         ${data.comments.map(c => `
@@ -223,14 +242,14 @@ const Forum = {
                         `).join('') || '<p class="muted-text">No comments yet</p>'}
                     </div>
                     <form class="comment-composer" data-comment-form="${i.id}">
-                        <input type="text" id="new-comment-${i.id}" placeholder="Add a comment..." autocomplete="off">
+                        <input type="text" id="new-comment" placeholder="Add a comment..." autocomplete="off">
                         <button class="btn btn-primary btn-sm" type="submit">Post</button>
                     </form>
                     ${this.isAdmin ? `
                         <div class="admin-inline-tools">
                             <h3>Admin Response</h3>
-                            <textarea id="admin-response-${i.id}" class="form-textarea" placeholder="Write admin response...">${ClassReserve.escapeHtml(i.admin_response || '')}</textarea>
-                            <select id="admin-status-${i.id}" class="form-select">
+                            <textarea id="admin-response" class="form-textarea" placeholder="Write admin response...">${ClassReserve.escapeHtml(i.admin_response || '')}</textarea>
+                            <select id="admin-status" class="form-select">
                                 ${['Open','Under Review','In Progress','Resolved','Rejected'].map(s =>
                                     `<option value="${s}" ${s===i.status?'selected':''}>${s}</option>`
                                 ).join('')}
@@ -251,7 +270,7 @@ const Forum = {
     },
 
     async postComment(issueId) {
-        const input = document.getElementById(`new-comment-${issueId}`);
+        const input = document.getElementById('new-comment');
         const msg = input?.value.trim() || '';
         if (!msg) return;
         try {
@@ -272,11 +291,11 @@ const Forum = {
                 method: 'PUT',
                 body: JSON.stringify({
                     id,
-                    status: document.getElementById(`admin-status-${id}`).value,
-                    admin_response: document.getElementById(`admin-response-${id}`).value
+                    status: document.getElementById('admin-status').value,
+                    admin_response: document.getElementById('admin-response').value
                 })
             });
-            this.openIssueId = null;
+            this.selectedIssueId = null;
             this.loadIssues();
         } catch (err) { alert(err.message); }
     },
@@ -302,7 +321,7 @@ const Forum = {
             if (!res.ok) throw new Error(data.error);
             document.getElementById('report-modal').classList.remove('open');
             document.getElementById('report-form').reset();
-            this.openIssueId = null;
+            this.selectedIssueId = null;
             this.loadIssues();
         } catch (err) { alert(err.message); }
     }
@@ -316,7 +335,7 @@ function debounce(fn, ms) {
 document.addEventListener('DOMContentLoaded', () => {
     Forum.init();
     const issueId = new URLSearchParams(window.location.search).get('issue');
-    if (issueId) window.setTimeout(() => Forum.toggleIssue(issueId), 200);
+    if (issueId) window.setTimeout(() => Forum.openIssue(issueId), 200);
 });
 </script>
 <?php

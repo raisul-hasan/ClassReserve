@@ -1098,7 +1098,41 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
 }
 
 .forum-filter-pills { margin-bottom: 22px; }
-.issues-feed { display: grid; gap: 14px; }
+.forum-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 18px;
+    align-items: start;
+}
+.issues-feed { display: grid; gap: 14px; min-width: 0; }
+
+.forum-detail-panel {
+    position: sticky;
+    top: 92px;
+    min-height: 420px;
+    max-height: calc(100vh - 120px);
+    overflow-y: auto;
+    background: rgba(33,7,6,0.72);
+    border: 1px solid rgba(241,230,210,0.1);
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: var(--cr-shadow);
+}
+.forum-detail-empty {
+    min-height: 320px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 10px;
+    text-align: center;
+    color: var(--cr-slate);
+}
+.forum-detail-empty svg { width: 36px; height: 36px; opacity: 0.5; }
+.forum-detail-head h2 {
+    margin: 0 0 12px;
+    font-size: 1.2rem;
+    line-height: 1.25;
+}
 
 .issue-card {
     background: linear-gradient(135deg, rgba(137,29,26,0.16), rgba(241,230,210,0.045));
@@ -1117,6 +1151,7 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     padding: 20px;
 }
 .issue-card:hover { border-color: rgba(137,29,26,0.46); transform: translateY(-1px); }
+.issue-card.selected { border-color: rgba(137,29,26,0.65); background: linear-gradient(135deg, rgba(137,29,26,0.24), rgba(241,230,210,0.055)); }
 
 .upvote-btn {
     display: flex;
@@ -1220,6 +1255,30 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     padding-top: 18px;
     border-top: 1px solid rgba(241,230,210,0.08);
 }
+.related-booking-card,
+.conflict-warning-card {
+    display: grid;
+    gap: 6px;
+    margin: 14px 0;
+    padding: 13px 14px;
+    border-radius: 10px;
+    background: rgba(137,29,26,0.12);
+    border: 1px solid rgba(137,29,26,0.25);
+    color: rgba(241,230,210,0.86);
+    font-size: 0.85rem;
+}
+.related-booking-card strong,
+.conflict-warning-card strong {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--cr-beige);
+}
+.related-booking-card svg,
+.conflict-warning-card svg { width: 15px; height: 15px; }
+.related-booking-card small { color: var(--cr-slate); }
+.conflict-warning-card { border-color: rgba(248,113,113,0.28); }
+.conflict-warning-card strong { color: #f87171; }
 
 .admin-response-banner {
     background: rgba(137,29,26,0.1);
@@ -1955,6 +2014,13 @@ body.no-nav .main-content { margin-left: 0; padding: 0; }
     .issue-heading-row {
         flex-direction: column;
         align-items: stretch;
+    }
+    .forum-layout {
+        grid-template-columns: 1fr;
+    }
+    .forum-detail-panel {
+        position: static;
+        max-height: none;
     }
     .issue-card-main {
         padding: 16px;
