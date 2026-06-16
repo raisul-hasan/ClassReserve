@@ -78,18 +78,20 @@ switch ($action) {
         $description = trim($_POST['description'] ?? '');
         $priority = $_POST['priority'] ?? 'Medium';
         $isAffecting = (int)($_POST['is_affecting_booking'] ?? 0);
-        $relatedBooking = $_POST['related_booking'] ? (int)$_POST['related_booking'] : null;
+        $relatedBookingValue = trim((string)($_POST['related_booking'] ?? ''));
+        $relatedBooking = $relatedBookingValue !== '' ? (int)$relatedBookingValue : null;
 
         if (!$title || !$roomName || !$category || !$description) {
             jsonError('All required fields must be filled');
         }
 
-        $stmt = getDb()->prepare("
+        $db = getDb();
+        $stmt = $db->prepare("
             INSERT INTO issues (user_id, title, room_name, category, description, priority, is_affecting_booking, related_booking)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ");
         $stmt->execute([$user['id'], $title, $roomName, $category, $description, $priority, $isAffecting, $relatedBooking]);
-        $issueId = (int)getDb()->lastInsertId();
+        $issueId = (int)$db->lastInsertId();
 
         auditLog((int)$user['id'], 'create_issue', 'issue', $issueId);
         jsonResponse(['success' => true, 'issue_id' => $issueId], 201);

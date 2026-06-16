@@ -270,8 +270,14 @@ const Forum = {
                 headers: { 'X-CSRF-Token': ClassReserve.csrfToken },
                 body: fd
             });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            const raw = await res.text();
+            let data = {};
+            try {
+                data = raw ? JSON.parse(raw) : {};
+            } catch (parseError) {
+                throw new Error('Could not submit report. Please check the server response.');
+            }
+            if (!res.ok) throw new Error(data.error || 'Could not submit report.');
             document.getElementById('report-modal').classList.remove('open');
             document.getElementById('report-form').reset();
             this.loadIssues();
