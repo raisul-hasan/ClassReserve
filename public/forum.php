@@ -289,7 +289,11 @@ function debounce(fn, ms) {
     return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-document.addEventListener('DOMContentLoaded', () => Forum.init());
+document.addEventListener('DOMContentLoaded', () => {
+    Forum.init();
+    const issueId = new URLSearchParams(window.location.search).get('issue');
+    if (issueId) Forum.openIssue(issueId);
+});
 </script>
 <?php
 $pageContent = ob_get_clean();

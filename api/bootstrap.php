@@ -137,9 +137,17 @@ function auditLog(?int $userId, string $action, ?string $targetType = null, ?int
     $stmt->execute([$userId, $action, $targetType, $targetId, $details]);
 }
 
-function createNotification(int $userId, string $type, string $title, string $message): void
+function createNotification(int $userId, string $type, string $title, string $message, ?string $link = null): void
 {
     if (!tableExists('notifications')) {
+        return;
+    }
+
+    if ($link && tableColumnExists('notifications', 'link')) {
+        $stmt = getDb()->prepare(
+            'INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$userId, $type, $title, $message, $link]);
         return;
     }
 

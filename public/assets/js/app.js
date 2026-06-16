@@ -1,5 +1,46 @@
 const ClassReserve = {
     csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '',
+    themeStorageKey: 'classreserve.theme',
+
+    getStoredTheme() {
+        try {
+            const theme = localStorage.getItem(this.themeStorageKey);
+            return theme === 'light' || theme === 'dark' ? theme : 'dark';
+        } catch {
+            return 'dark';
+        }
+    },
+
+    setTheme(theme) {
+        const nextTheme = theme === 'light' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = nextTheme;
+        document.documentElement.style.colorScheme = nextTheme;
+        try {
+            localStorage.setItem(this.themeStorageKey, nextTheme);
+        } catch {
+            // Ignore storage failures so the visible switch still works.
+        }
+
+        document.querySelectorAll('[data-theme-toggle]').forEach(toggle => {
+            const label = nextTheme === 'dark' ? 'Light' : 'Dark';
+            const icon = nextTheme === 'dark' ? 'sun' : 'moon';
+            toggle.setAttribute('aria-label', `Switch to ${label.toLowerCase()} mode`);
+            toggle.setAttribute('title', `Switch to ${label.toLowerCase()} mode`);
+            toggle.innerHTML = `<i data-lucide="${icon}"></i><span>${label}</span>`;
+        });
+
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
+    initTheme() {
+        this.setTheme(this.getStoredTheme());
+        document.querySelectorAll('[data-theme-toggle]').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+                this.setTheme(current === 'light' ? 'dark' : 'light');
+            });
+        });
+    },
 
     async api(endpoint, options = {}) {
         const headers = { ...options.headers };
@@ -80,8 +121,9 @@ const ClassReserve = {
 
             list.innerHTML = notifications.map(n => {
                 const created = n.created_at ? `${this.formatDate(n.created_at)} ${this.formatTime(n.created_at)}` : '';
+                const link = n.link ? ` data-link="${this.escapeHtml(n.link)}"` : '';
                 return `
-                    <button class="notification-item ${Number(n.is_read) ? '' : 'unread'}" type="button" data-id="${n.id}">
+                    <button class="notification-item ${Number(n.is_read) ? '' : 'unread'}" type="button" data-id="${n.id}"${link}>
                         <span class="notification-dot ${this.notificationDotClass(n.type)}"></span>
                         <span class="notification-body">
                             <span class="notification-title">
@@ -140,6 +182,7 @@ const ClassReserve = {
             if (!item) return;
             const id = Number(item.dataset.id || 0);
             if (id && item.classList.contains('unread')) await this.markNotificationsRead(id);
+            if (item.dataset.link) window.location.href = item.dataset.link;
         });
 
         document.addEventListener('click', (e) => {
@@ -216,6 +259,7 @@ const ClassReserve = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    ClassReserve.initTheme();
     ClassReserve.initSidebar();
     ClassReserve.initNotifications();
     ClassReserve.initDrawers();

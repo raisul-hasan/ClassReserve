@@ -17,11 +17,29 @@ $hideNav = $hideNav ?? false;
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <script>
+        (() => {
+            try {
+                const storedTheme = localStorage.getItem('classreserve.theme');
+                const theme = storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'dark';
+                document.documentElement.dataset.theme = theme;
+                document.documentElement.style.colorScheme = theme;
+            } catch {
+                document.documentElement.dataset.theme = 'dark';
+            }
+        })();
+    </script>
     <link rel="stylesheet" href="/public/assets/css/tailwind.css">
     <link rel="stylesheet" href="/public/assets/css/styles.css">
     <meta name="csrf-token" content="<?= sanitize(getCsrfToken()) ?>">
 </head>
 <body class="<?= $hideNav ? 'no-nav' : 'has-nav' ?>">
+<?php if ($hideNav || !$user): ?>
+<button id="theme-toggle" class="theme-toggle theme-toggle-floating" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
+    <i data-lucide="sun"></i>
+    <span>Light</span>
+</button>
+<?php endif; ?>
 <?php if (!$hideNav && $user): ?>
 <aside id="sidebar" class="sidebar">
     <div class="sidebar-header">
@@ -59,6 +77,10 @@ $hideNav = $hideNav ?? false;
 <main class="main-content">
     <?php if (!$hideNav && $user): ?>
         <div class="topbar">
+            <button id="theme-toggle" class="theme-toggle" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
+                <i data-lucide="sun"></i>
+                <span>Light</span>
+            </button>
             <div class="notification-menu">
                 <button id="notification-toggle" class="notification-toggle" type="button" aria-label="Open notifications" aria-expanded="false">
                     <i data-lucide="bell"></i>

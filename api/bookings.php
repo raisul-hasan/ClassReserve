@@ -205,7 +205,7 @@ switch ($action) {
         ]);
         $bookingId = (int)getDb()->lastInsertId();
 
-        createNotification((int)$user['id'], 'pending', 'Booking Submitted', "Your booking \"$title\" is pending approval.");
+        createNotification((int)$user['id'], 'pending', 'Booking Submitted', "Your booking \"$title\" is pending approval.", "/public/my-bookings.php?highlight=$bookingId");
 
         $approverStmt = getDb()->prepare("
             SELECT id FROM users
@@ -219,7 +219,8 @@ switch ($action) {
                 (int)$approver['id'],
                 'pending',
                 'Booking Request Pending',
-                "{$user['name']} requested \"{$title}\" and is waiting for approval."
+                "{$user['name']} requested \"{$title}\" and is waiting for approval.",
+                "/public/admin.php?highlight=$bookingId"
             );
         }
         auditLog((int)$user['id'], 'create_booking', 'booking', $bookingId);
@@ -256,7 +257,8 @@ switch ($action) {
             (int)$booking['user_id'],
             $notifType,
             'Booking ' . ucfirst($status),
-            "Your booking \"{$booking['title']}\" has been $status."
+            "Your booking \"{$booking['title']}\" has been $status.",
+            "/public/my-bookings.php?highlight=$id"
         );
         auditLog((int)$user['id'], "booking_$status", 'booking', $id);
 
@@ -290,7 +292,8 @@ switch ($action) {
             (int)$user['id'],
             'warning',
             'Booking Cancelled',
-            "Your booking \"{$booking['title']}\" has been cancelled."
+            "Your booking \"{$booking['title']}\" has been cancelled.",
+            "/public/my-bookings.php?highlight=$id"
         );
         auditLog((int)$user['id'], 'booking_cancelled', 'booking', $id);
 
