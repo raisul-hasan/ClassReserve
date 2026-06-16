@@ -93,7 +93,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No pending bookings</td></tr>';
         } else {
             tbody.innerHTML = pending.map(b => `
-                <tr>
+                <tr id="booking-row-${b.id}">
                     <td>${b.title}</td>
                     <td>${b.room_name}</td>
                     <td>${b.user_name}</td>
@@ -118,6 +118,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <td><span class="status-pill status-${r.status === 'available' ? 'approved' : 'pending'}">${r.status}</span></td>
             </tr>
         `).join('');
+        const highlightId = new URLSearchParams(window.location.search).get('highlight');
+        if (highlightId) {
+            const row = document.getElementById('booking-row-' + highlightId);
+            if (row) {
+                row.classList.add('row-highlight');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
     } catch (err) { console.error(err); }
 });
 

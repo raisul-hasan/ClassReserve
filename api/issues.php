@@ -148,7 +148,8 @@ switch ($action) {
                 (int)$issue['user_id'],
                 'info',
                 'Issue Updated',
-                "Your issue \"{$issue['title']}\" status changed to $status."
+                "Your issue \"{$issue['title']}\" status changed to $status.",
+                "/public/forum.php?issue=$id"
             );
         }
 

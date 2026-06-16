@@ -12,6 +12,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
+set_exception_handler(function (Throwable $e): void {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => 'Server error: ' . $e->getMessage(),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+});
+
 session_start();
 
 $config = require __DIR__ . '/../config/database.php';
@@ -82,16 +91,66 @@ function getJsonInput(): array
     return is_array($data) ? $data : [];
 }
 
+function tableColumnExists(string $table, string $column): bool
+{
+    static $cache = [];
+    $key = $table . '.' . $column;
+    if (!array_key_exists($key, $cache)) {
+        $stmt = getDb()->prepare("
+            SELECT COUNT(*)
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = ?
+              AND COLUMN_NAME = ?
+        ");
+        $stmt->execute([$table, $column]);
+        $cache[$key] = (bool) $stmt->fetchColumn();
+    }
+    return $cache[$key];
+}
+
+function tableExists(string $table): bool
+{
+    static $cache = [];
+    if (!array_key_exists($table, $cache)) {
+        $stmt = getDb()->prepare("
+            SELECT COUNT(*)
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = DATABASE()
+              AND TABLE_NAME = ?
+        ");
+        $stmt->execute([$table]);
+        $cache[$table] = (bool) $stmt->fetchColumn();
+    }
+    return $cache[$table];
+}
+
 function auditLog(?int $userId, string $action, ?string $targetType = null, ?int $targetId = null, ?string $details = null): void
 {
+    if (!tableExists('audit_logs')) {
+        return;
+    }
+
     $stmt = getDb()->prepare(
         'INSERT INTO audit_logs (user_id, action, target_type, target_id, details) VALUES (?, ?, ?, ?, ?)'
     );
     $stmt->execute([$userId, $action, $targetType, $targetId, $details]);
 }
 
-function createNotification(int $userId, string $type, string $title, string $message): void
+function createNotification(int $userId, string $type, string $title, string $message, ?string $link = null): void
 {
+    if (!tableExists('notifications')) {
+        return;
+    }
+
+    if ($link && tableColumnExists('notifications', 'link')) {
+        $stmt = getDb()->prepare(
+            'INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$userId, $type, $title, $message, $link]);
+        return;
+    }
+
     $stmt = getDb()->prepare(
         'INSERT INTO notifications (user_id, type, title, message) VALUES (?, ?, ?, ?)'
     );

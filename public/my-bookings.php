@@ -47,7 +47,7 @@ async function loadMyBookings() {
         }
 
         body.innerHTML = data.bookings.map(booking => `
-            <tr>
+            <tr id="booking-row-${booking.id}">
                 <td>
                     <strong>${ClassReserve.escapeHtml(booking.title || 'Untitled booking')}</strong>
                     ${booking.description ? `<br><span class="muted-text">${ClassReserve.escapeHtml(booking.description)}</span>` : ''}
@@ -71,6 +71,16 @@ async function loadMyBookings() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     await loadMyBookings();
+
+    const highlightId = new URLSearchParams(window.location.search).get('highlight');
+    if (highlightId) {
+        const row = document.getElementById('booking-row-' + highlightId);
+        if (row) {
+            row.classList.add('row-highlight');
+            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
     document.getElementById('bookings-body').addEventListener('click', async (event) => {
         const button = event.target.closest('.cancel-booking');
         if (!button) return;

@@ -21,11 +21,13 @@ switch ($action) {
             jsonError('Email and password are required');
         }
 
-        $stmt = getDb()->prepare('SELECT * FROM users WHERE email = ? AND is_active = 1');
+        $activeSql = tableColumnExists('users', 'is_active') ? ' AND is_active = 1' : '';
+        $stmt = getDb()->prepare('SELECT * FROM users WHERE email = ?' . $activeSql);
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        if (!$user || !password_verify($password, $user['password'])) {
+        $passwordHash = $user['password'] ?? $user['password_hash'] ?? '';
+        if (!$user || !password_verify($password, $passwordHash)) {
             jsonError('Invalid credentials', 401);
         }
 
@@ -33,7 +35,7 @@ switch ($action) {
             jsonError('Role mismatch for this account', 403);
         }
 
-        unset($user['password']);
+        unset($user['password'], $user['password_hash']);
         $_SESSION['user'] = $user;
         auditLog((int)$user['id'], 'login', 'user', (int)$user['id']);
 
@@ -72,8 +74,20 @@ switch ($action) {
         }
 
         $hash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt = getDb()->prepare('INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)');
-        $stmt->execute([$name, $email, $hash, $role]);
+        $passwordColumn = tableColumnExists('users', 'password') ? 'password' : 'password_hash';
+        $columns = ['name', 'email', $passwordColumn, 'role'];
+        $values = [$name, $email, $hash, $role];
+
+        if ($role === 'club' && tableColumnExists('users', 'club_name')) {
+            $columns[] = 'club_name';
+            $values[] = $name;
+        }
+
+        $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+        $stmt = getDb()->prepare(
+            'INSERT INTO users (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')'
+        );
+        $stmt->execute($values);
         $userId = (int)getDb()->lastInsertId();
 
         auditLog($userId, 'register', 'user', $userId);
