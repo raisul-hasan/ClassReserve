@@ -129,38 +129,49 @@ function updateNoShows(): void
 function checkBookingConflict(int $roomId, string $start, string $end, int $requestPriority = 0, ?int $excludeId = null): ?string
 {
     $db = getDb();
+    $startTimestamp = strtotime($start);
+    $endTimestamp = strtotime($end);
+
+    if ($startTimestamp === false || $endTimestamp === false || $endTimestamp <= $startTimestamp) {
+        return 'Invalid time';
+    }
+
+    $normalizedStart = date('Y-m-d H:i:s', $startTimestamp);
+    $normalizedEnd = date('Y-m-d H:i:s', $endTimestamp);
 
     $sql = "
         SELECT id, status, priority FROM bookings
         WHERE room_id = ? AND status IN ('pending', 'approved')
           AND start_datetime < ? AND end_datetime > ?
     ";
-    $params = [$roomId, $end, $start];
+    $params = [$roomId, $normalizedEnd, $normalizedStart];
     if ($excludeId) {
         $sql .= ' AND id != ?';
         $params[] = $excludeId;
     }
     $stmt = $db->prepare($sql);
     $stmt->execute($params);
-    while ($booking = $stmt->fetch()) {
-        if ($booking['status'] === 'approved' || $booking['priority'] >= $requestPriority) {
-            return 'Room has a conflicting booking';
-        }
+    if ($stmt->fetch()) {
+        return 'Room already booked';
     }
 
     $stmt = $db->prepare("
         SELECT id FROM maintenance
         WHERE room_id = ? AND start_datetime < ? AND end_datetime > ?
     ");
-    $stmt->execute([$roomId, $end, $start]);
+    $stmt->execute([$roomId, $normalizedEnd, $normalizedStart]);
     if ($stmt->fetch()) {
-        return 'Room is under maintenance during this period';
+        return 'Room under maintenance';
     }
 
     $stmt = $db->prepare('SELECT status FROM rooms WHERE id = ?');
     $stmt->execute([$roomId]);
     $room = $stmt->fetch();
     if (!$room || !in_array($room['status'], ['available'], true)) {
+        if (($room['status'] ?? '') === 'maintenance') {
+            return 'Room under maintenance';
+        }
+
         return 'Room is not available for booking';
     }
 

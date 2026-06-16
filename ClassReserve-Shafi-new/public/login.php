@@ -2,7 +2,8 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 
 if (isLoggedIn()) {
-    header('Location: /public/dashboard.php');
+    $user = currentUser();
+    header('Location: ' . (($user['role'] ?? '') === 'faculty' ? '/faculty' : '/public/dashboard.php'));
     exit;
 }
 
@@ -121,7 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     role: selectedRole
                 })
             });
-            window.location.href = selectedRole === 'admin' ? '/public/admin.php' : '/public/dashboard.php';
+            window.location.href = selectedRole === 'admin' ? '/public/admin.php' : (selectedRole === 'faculty' ? '/faculty' : '/public/dashboard.php');
         } catch (err) {
             showAlert(err.message);
         }

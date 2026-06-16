@@ -38,9 +38,24 @@ if ($user['role'] === 'admin') {
     $stmt = $db->query("SELECT COUNT(*) FROM issues WHERE status NOT IN ('Resolved', 'Rejected')");
     $stats['issues'] = (int)$stmt->fetchColumn();
 } elseif ($user['role'] === 'faculty') {
-    $stmt = $db->prepare("SELECT COUNT(*) FROM bookings WHERE user_id = ?");
+    $stmt = $db->prepare("
+        SELECT COUNT(*) FROM bookings
+        WHERE user_id = ?
+          AND status IN ('pending', 'approved')
+          AND start_datetime >= NOW()
+    ");
     $stmt->execute([$user['id']]);
     $stats['bookings'] = (int)$stmt->fetchColumn();
+
+    $stmt = $db->prepare("
+        SELECT COUNT(*) FROM bookings
+        WHERE user_id = ?
+          AND status IN ('pending', 'approved')
+          AND start_datetime < ?
+          AND end_datetime > ?
+    ");
+    $stmt->execute([$user['id'], $todayEnd, $todayStart]);
+    $stats['today'] = (int)$stmt->fetchColumn();
 
     // Faculty pending means student/club pending requests awaiting faculty review
     $stmt = $db->query("SELECT COUNT(*) FROM bookings b JOIN users u ON u.id = b.user_id WHERE b.status = 'pending' AND u.role IN ('student', 'club')");
@@ -92,19 +107,46 @@ $response = [
 ];
 
 if ($user['role'] === 'faculty') {
-    // 1. Faculty's own upcoming/all bookings
+    $response['faculty'] = [
+        'id' => (int)$user['id'],
+        'name' => $user['name'],
+        'email' => $user['email'],
+        'role' => $user['role'],
+    ];
+
+    // 1. Today's faculty schedule
     $stmt = $db->prepare("
         SELECT b.*, r.name AS room_name, r.building, u.name AS user_name
         FROM bookings b
         JOIN rooms r ON r.id = b.room_id
         JOIN users u ON u.id = b.user_id
         WHERE b.user_id = ?
-        ORDER BY b.start_datetime DESC
+          AND b.status IN ('pending', 'approved')
+          AND b.start_datetime < ?
+          AND b.end_datetime > ?
+        ORDER BY b.start_datetime ASC
+    ");
+    $stmt->execute([$user['id'], $todayEnd, $todayStart]);
+    $response['today_schedule'] = $stmt->fetchAll();
+
+    // 2. Faculty's upcoming bookings
+    $stmt = $db->prepare("
+        SELECT b.*, r.name AS room_name, r.building, u.name AS user_name
+        FROM bookings b
+        JOIN rooms r ON r.id = b.room_id
+        JOIN users u ON u.id = b.user_id
+        WHERE b.user_id = ?
+          AND b.status IN ('pending', 'approved')
+          AND b.start_datetime >= NOW()
+        ORDER BY b.start_datetime ASC
+        LIMIT 12
     ");
     $stmt->execute([$user['id']]);
-    $response['my_bookings'] = $stmt->fetchAll();
+    $upcomingBookings = $stmt->fetchAll();
+    $response['upcoming_bookings'] = $upcomingBookings;
+    $response['my_bookings'] = $upcomingBookings;
 
-    // 2. Pending student/club requests sorted by priority DESC, start_datetime ASC, created_at ASC
+    // 3. Pending student/club requests sorted by priority DESC, start_datetime ASC, created_at ASC
     $stmt = $db->prepare("
         SELECT b.*, r.name AS room_name, r.building, u.name AS user_name, u.role AS user_role
         FROM bookings b
@@ -116,7 +158,7 @@ if ($user['role'] === 'faculty') {
     $stmt->execute();
     $response['pending_requests'] = $stmt->fetchAll();
 
-    // 3. Approved bookings/events
+    // 4. Approved bookings/events
     $stmt = $db->prepare("
         SELECT b.*, r.name AS room_name, r.building, u.name AS user_name, u.role AS user_role
         FROM bookings b

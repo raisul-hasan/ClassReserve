@@ -14,21 +14,30 @@ $pageTitle = 'Dashboard';
 ob_start();
 ?>
 <div class="page-header">
-    <h1>Dashboard</h1>
-    <p>Welcome back, <?= sanitize($user['name']) ?> — <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php if ($user['role'] === 'faculty'): ?>
+        <h1>Faculty Dashboard</h1>
+        <p><span id="faculty-name"><?= sanitize($user['name']) ?></span> - <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php else: ?>
+        <h1>Dashboard</h1>
+        <p>Welcome back, <?= sanitize($user['name']) ?> — <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php endif; ?>
 </div>
 
 <?php if ($user['role'] === 'faculty'): ?>
-    <!-- Faculty Portal View -->
     <div class="stat-grid" id="stat-grid">
         <div class="stat-card stat-rooms">
             <div class="stat-icon"><i data-lucide="door-open"></i></div>
             <div class="stat-label">Available Rooms Today</div>
             <div class="stat-value" id="stat-rooms">—</div>
         </div>
+        <div class="stat-card stat-notices">
+            <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
+            <div class="stat-label">Today's Schedule</div>
+            <div class="stat-value" id="stat-today">—</div>
+        </div>
         <div class="stat-card stat-bookings">
             <div class="stat-icon"><i data-lucide="calendar"></i></div>
-            <div class="stat-label">My Reservations</div>
+            <div class="stat-label">Upcoming Bookings</div>
             <div class="stat-value" id="stat-bookings">—</div>
         </div>
         <div class="stat-card stat-pending">
@@ -36,91 +45,75 @@ ob_start();
             <div class="stat-label">Pending Requests</div>
             <div class="stat-value" id="stat-pending">—</div>
         </div>
-        <div class="stat-card stat-notices">
-            <div class="stat-icon"><i data-lucide="bell"></i></div>
-            <div class="stat-label">Notices</div>
-            <div class="stat-value" id="stat-notices">—</div>
-        </div>
     </div>
 
-    <!-- Quick Actions -->
     <div class="card" style="margin-bottom:24px">
         <h3 class="card-title"><i data-lucide="zap" style="width:16px;display:inline;vertical-align:-2px"></i> Quick Actions</h3>
         <div style="display:flex;gap:12px;flex-wrap:wrap">
-            <a href="/public/new-booking.php" class="btn btn-primary"><i data-lucide="search"></i> Search Available Room</a>
-            <a href="/public/new-booking.php" class="btn btn-primary"><i data-lucide="calendar-plus"></i> Reserve Room</a>
-            <button class="btn btn-secondary action-tab-trigger" data-target="tab-my-bookings"><i data-lucide="list"></i> View My Bookings</button>
-            <button class="btn btn-secondary action-tab-trigger" data-target="tab-pending"><i data-lucide="check-square"></i> Review Pending Requests</button>
-            <a href="/public/calendar.php" class="btn btn-secondary"><i data-lucide="calendar"></i> View Calendar</a>
+            <a href="/faculty/rooms" class="btn btn-primary"><i data-lucide="search"></i> Search Available Room</a>
+            <a href="/faculty/reserve.php" class="btn btn-primary"><i data-lucide="calendar-plus"></i> Create Booking</a>
+            <a href="/faculty/reservations" class="btn btn-secondary"><i data-lucide="list"></i> My Bookings</a>
+            <a href="/faculty/approvals" class="btn btn-secondary"><i data-lucide="check-square"></i> Review Requests</a>
+            <a href="/faculty/calendar" class="btn btn-secondary"><i data-lucide="calendar"></i> Calendar</a>
         </div>
     </div>
 
-    <!-- Tabs Content & Notifications Split -->
     <div class="split-grid">
         <div class="card" style="flex:2">
             <div class="auth-tabs" id="dashboard-tabs" style="margin-bottom:20px">
-                <button class="auth-tab active" data-target="tab-pending">Review Pending Requests (<span id="count-pending">0</span>)</button>
-                <button class="auth-tab" data-target="tab-my-bookings">My Bookings (<span id="count-my-bookings">0</span>)</button>
-                <button class="auth-tab" data-target="tab-approved-events">Approved Events</button>
+                <button class="auth-tab active" data-target="tab-today">Today's Schedule (<span id="count-today">0</span>)</button>
+                <button class="auth-tab" data-target="tab-upcoming">Upcoming Bookings (<span id="count-upcoming">0</span>)</button>
+                <button class="auth-tab" data-target="tab-pending">Pending Requests (<span id="count-pending">0</span>)</button>
             </div>
 
-            <!-- Tab: Pending Requests -->
-            <div class="tab-panel active" id="tab-pending">
+            <div class="tab-panel active" id="tab-today">
+                <div style="overflow-x:auto">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Room</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="today-schedule-body">
+                            <tr><td colspan="3"><div class="spinner"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-panel hidden" id="tab-upcoming">
+                <div style="overflow-x:auto">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Event</th>
+                                <th>Room</th>
+                                <th>Date & Time</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="upcoming-bookings-body">
+                            <tr><td colspan="4"><div class="spinner"></div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="tab-panel hidden" id="tab-pending">
                 <div style="overflow-x:auto">
                     <table class="data-table">
                         <thead>
                             <tr>
                                 <th>Requester</th>
                                 <th>Room</th>
-                                <th>Event Details</th>
-                                <th>Time</th>
-                                <th>Purpose</th>
-                                <th>Action</th>
+                                <th>Event</th>
+                                <th>Requested Time</th>
+                                <th>Priority</th>
                             </tr>
                         </thead>
                         <tbody id="pending-requests-body">
-                            <tr><td colspan="6"><div class="spinner"></div></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Tab: My Bookings -->
-            <div class="tab-panel hidden" id="tab-my-bookings">
-                <div style="overflow-x:auto">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Event Title</th>
-                                <th>Room</th>
-                                <th>Date & Time</th>
-                                <th>Purpose</th>
-                                <th>Participants</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody id="my-bookings-body">
-                            <tr><td colspan="7"><div class="spinner"></div></td></tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Tab: Approved Events -->
-            <div class="tab-panel hidden" id="tab-approved-events">
-                <div style="overflow-x:auto">
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Event Title</th>
-                                <th>Booked By</th>
-                                <th>Room</th>
-                                <th>Date & Time</th>
-                                <th>Purpose</th>
-                            </tr>
-                        </thead>
-                        <tbody id="approved-events-body">
                             <tr><td colspan="5"><div class="spinner"></div></td></tr>
                         </tbody>
                     </table>
@@ -134,13 +127,6 @@ ob_start();
                 <li class="activity-item"><div class="spinner"></div></li>
             </ul>
         </div>
-    </div>
-
-    <!-- Review Drawer -->
-    <div class="drawer-overlay" id="review-drawer-overlay"></div>
-    <div class="drawer" id="review-drawer">
-        <button class="drawer-close" id="review-drawer-close"><i data-lucide="x"></i></button>
-        <div id="review-drawer-content" style="margin-top:20px"></div>
     </div>
 
 <?php else: ?>
@@ -195,186 +181,122 @@ document.addEventListener('DOMContentLoaded', async () => {
     const userRole = '<?= $user['role'] ?>';
 
     if (userRole === 'faculty') {
-        // Tab switching
-        document.querySelectorAll('#dashboard-tabs .auth-tab').forEach(tab => {
+        const tabButtons = document.querySelectorAll('#dashboard-tabs .auth-tab');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+
+        const showTab = (target) => {
+            tabButtons.forEach(t => t.classList.toggle('active', t.dataset.target === target));
+            tabPanels.forEach(p => p.classList.toggle('hidden', p.id !== target));
+        };
+
+        tabButtons.forEach(tab => {
             tab.addEventListener('click', () => {
-                document.querySelectorAll('#dashboard-tabs .auth-tab').forEach(t => t.classList.remove('active'));
-                tab.classList.add('active');
-                const target = tab.dataset.target;
-                document.querySelectorAll('.tab-panel').forEach(p => {
-                    p.classList.toggle('hidden', p.id !== target);
-                });
+                showTab(tab.dataset.target);
             });
         });
 
-        // Quick Action tab triggers
         document.querySelectorAll('.action-tab-trigger').forEach(btn => {
             btn.addEventListener('click', () => {
-                const target = btn.dataset.target;
-                const tab = document.querySelector(`#dashboard-tabs .auth-tab[data-target="${target}"]`);
-                if (tab) tab.click();
+                showTab(btn.dataset.target);
             });
         });
 
-        // Review drawer utilities
-        window.reviewBooking = (bookingJsonStr) => {
-            const booking = JSON.parse(decodeURIComponent(bookingJsonStr));
-            const attachmentHtml = booking.uploaded_path 
-                ? `<div class="receipt-row"><span class="receipt-label">Attachment</span><span class="receipt-value"><a href="/public/${booking.uploaded_path}" target="_blank" class="btn btn-sm btn-secondary" style="font-size:0.75rem;padding:3px 6px"><i data-lucide="file-text"></i> View Document</a></span></div>`
-                : '';
+        function emptyRow(cols, message) {
+            return `<tr><td colspan="${cols}" class="empty-state">${message}</td></tr>`;
+        }
 
-            document.getElementById('review-drawer-content').innerHTML = `
-                <h2 style="margin-bottom:16px;font-size:1.4rem">Review Booking Request</h2>
-                <p style="color:var(--cr-slate);margin-bottom:20px;font-size:0.9rem">Submitted by <strong>${ClassReserve.escapeHtml(booking.user_name)}</strong> (${roleLabel(booking.user_role)})</p>
-                
-                <div class="receipt-card" style="margin-bottom:24px">
-                    <div class="receipt-row"><span class="receipt-label">Event Title</span><span class="receipt-value">${ClassReserve.escapeHtml(booking.title)}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Description</span><span class="receipt-value">${ClassReserve.escapeHtml(booking.description || 'No description provided')}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Room</span><span class="receipt-value">${ClassReserve.escapeHtml(booking.room_name)}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Building</span><span class="receipt-value">${ClassReserve.escapeHtml(booking.building)}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Date</span><span class="receipt-value">${ClassReserve.formatDate(booking.start_datetime)}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Time</span><span class="receipt-value">${ClassReserve.formatTime(booking.start_datetime)} — ${ClassReserve.formatTime(booking.end_datetime)}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Expected Attendees</span><span class="receipt-value">${booking.attendees ?? '—'}</span></div>
-                    <div class="receipt-row"><span class="receipt-label">Booking Type / Purpose</span><span class="receipt-value">${ClassReserve.escapeHtml(booking.purpose || '—')}</span></div>
-                    ${attachmentHtml}
-                </div>
+        function roomText(booking) {
+            const room = ClassReserve.escapeHtml(booking.room_name || 'Room');
+            const building = ClassReserve.escapeHtml(booking.building || '');
+            return `<strong>${room}</strong>${building ? `<br><span style="font-size:0.75rem;color:var(--cr-slate)">${building}</span>` : ''}`;
+        }
 
-                <div class="form-group">
-                    <label for="review-note">Review Note (Reason)</label>
-                    <input type="text" id="review-note" class="form-input" placeholder="e.g. Approved for class prep">
-                </div>
+        function timeRange(booking) {
+            return `${ClassReserve.formatTime(booking.start_datetime)} - ${ClassReserve.formatTime(booking.end_datetime)}`;
+        }
 
-                <div style="display:flex;gap:12px;margin-top:20px">
-                    <button class="btn btn-primary" style="flex:1" onclick="submitReview(${booking.id}, 'approved')"><i data-lucide="check"></i> Approve</button>
-                    <button class="btn btn-secondary" style="flex:1;color:#ff8a85;border-color:rgba(137,29,26,0.3)" onclick="submitReview(${booking.id}, 'rejected')"><i data-lucide="x"></i> Reject</button>
-                </div>
-            `;
-
-            document.getElementById('review-drawer').classList.add('open');
-            document.getElementById('review-drawer-overlay').classList.add('open');
-            lucide.createIcons();
-        };
-
-        window.submitReview = async (id, status) => {
-            const note = document.getElementById('review-note').value;
-            try {
-                await ClassReserve.api('/api/bookings.php?action=update', {
-                    method: 'PUT',
-                    body: JSON.stringify({ id, status, note })
-                });
-                document.querySelectorAll('.drawer, .drawer-overlay').forEach(d => d.classList.remove('open'));
-                loadFacultyDashboard();
-            } catch (err) {
-                alert(err.message);
-            }
-        };
-
-        window.cancelBooking = async (id) => {
-            if (!confirm('Are you sure you want to cancel this booking?')) return;
-            try {
-                await ClassReserve.api('/api/bookings.php?action=update', {
-                    method: 'PUT',
-                    body: JSON.stringify({ id, status: 'cancelled' })
-                });
-                loadFacultyDashboard();
-            } catch (err) {
-                alert(err.message);
-            }
-        };
+        function dateTimeRange(booking) {
+            return `${ClassReserve.formatDate(booking.start_datetime)}<br><span style="font-size:0.75rem;color:var(--cr-slate)">${timeRange(booking)}</span>`;
+        }
 
         function roleLabel(role) {
             return role === 'club' ? 'Club' : (role === 'faculty' ? 'Faculty' : 'Student');
         }
 
+        function roleClass(role) {
+            if (role === 'club') return 'role-club';
+            if (role === 'faculty') return 'role-faculty';
+            return 'role-student';
+        }
+
         async function loadFacultyDashboard() {
             try {
                 const data = await ClassReserve.api('/api/dashboard.php');
-                const s = data.stats;
+                const s = data.stats || {};
+                const todaySchedule = data.today_schedule || [];
+                const upcomingBookings = data.upcoming_bookings || data.my_bookings || [];
+                const pendingRequests = data.pending_requests || [];
+
                 document.getElementById('stat-rooms').textContent = s.rooms ?? 0;
+                document.getElementById('stat-today').textContent = s.today ?? todaySchedule.length;
                 document.getElementById('stat-bookings').textContent = s.bookings ?? 0;
                 document.getElementById('stat-pending').textContent = s.pending ?? 0;
-                document.getElementById('stat-notices').textContent = s.notices ?? 0;
-                
-                document.getElementById('count-pending').textContent = s.pending ?? 0;
-                document.getElementById('count-my-bookings').textContent = s.bookings ?? 0;
 
-                // Pending Requests
+                document.getElementById('count-today').textContent = todaySchedule.length;
+                document.getElementById('count-upcoming').textContent = upcomingBookings.length;
+                document.getElementById('count-pending').textContent = pendingRequests.length;
+
+                const todayEl = document.getElementById('today-schedule-body');
+                if (todaySchedule.length === 0) {
+                    todayEl.innerHTML = emptyRow(3, 'No faculty bookings scheduled today');
+                } else {
+                    todayEl.innerHTML = todaySchedule.map(b => `
+                        <tr>
+                            <td><strong>${ClassReserve.escapeHtml(b.title)}</strong><br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.escapeHtml(b.description || '')}</span></td>
+                            <td>${roomText(b)}</td>
+                            <td>${timeRange(b)}<br>${ClassReserve.statusBadge(b.status)}</td>
+                        </tr>
+                    `).join('');
+                }
+
+                const upcomingEl = document.getElementById('upcoming-bookings-body');
+                if (upcomingBookings.length === 0) {
+                    upcomingEl.innerHTML = emptyRow(4, 'No upcoming faculty bookings');
+                } else {
+                    upcomingEl.innerHTML = upcomingBookings.map(b => `
+                        <tr>
+                            <td><strong>${ClassReserve.escapeHtml(b.title)}</strong><br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.escapeHtml(b.description || '')}</span></td>
+                            <td>${roomText(b)}</td>
+                            <td>${dateTimeRange(b)}</td>
+                            <td>${ClassReserve.statusBadge(b.status)}</td>
+                        </tr>
+                    `).join('');
+                }
+
                 const pendingEl = document.getElementById('pending-requests-body');
-                if (!data.pending_requests || data.pending_requests.length === 0) {
-                    pendingEl.innerHTML = '<tr><td colspan="6" class="empty-state">No pending requests awaiting your review</td></tr>';
+                if (pendingRequests.length === 0) {
+                    pendingEl.innerHTML = emptyRow(5, 'No pending student or club requests');
                 } else {
-                    pendingEl.innerHTML = data.pending_requests.map(b => {
-                        const priorityClass = b.priority == 3 ? 'role-faculty' : (b.priority == 2 ? 'role-club' : 'role-student');
-                        const priorityText = b.priority == 3 ? 'Faculty' : (b.priority == 2 ? 'Club' : 'Student');
-                        const timeStr = `${ClassReserve.formatDate(b.start_datetime)}<br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.formatTime(b.start_datetime)} — ${ClassReserve.formatTime(b.end_datetime)}</span>`;
-                        const escBooking = encodeURIComponent(JSON.stringify(b));
+                    pendingEl.innerHTML = pendingRequests.map(b => {
+                        const requesterRole = roleLabel(b.user_role);
                         return `
                             <tr>
-                                <td><strong>${ClassReserve.escapeHtml(b.user_name)}</strong><br><span class="role-badge ${priorityClass}">${priorityText}</span></td>
-                                <td><strong>${ClassReserve.escapeHtml(b.room_name)}</strong><br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.escapeHtml(b.building)}</span></td>
+                                <td><strong>${ClassReserve.escapeHtml(b.user_name)}</strong><br><span class="role-badge ${roleClass(b.user_role)}">${requesterRole}</span></td>
+                                <td>${roomText(b)}</td>
                                 <td><strong>${ClassReserve.escapeHtml(b.title)}</strong></td>
-                                <td>${timeStr}</td>
-                                <td>${ClassReserve.escapeHtml(b.purpose || '—')}</td>
-                                <td>
-                                    <button class="btn btn-sm btn-primary" onclick="reviewBooking('${escBooking}')">Review</button>
-                                </td>
+                                <td>${dateTimeRange(b)}</td>
+                                <td><span class="role-badge ${roleClass(b.user_role)}">Tier ${b.priority}</span></td>
                             </tr>
                         `;
                     }).join('');
                 }
 
-                // My Bookings
-                const myBookingsEl = document.getElementById('my-bookings-body');
-                if (!data.my_bookings || data.my_bookings.length === 0) {
-                    myBookingsEl.innerHTML = '<tr><td colspan="7" class="empty-state">You have not made any bookings yet</td></tr>';
-                } else {
-                    myBookingsEl.innerHTML = data.my_bookings.map(b => {
-                        const timeStr = `${ClassReserve.formatDate(b.start_datetime)}<br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.formatTime(b.start_datetime)} — ${ClassReserve.formatTime(b.end_datetime)}</span>`;
-                        const showCancel = b.status === 'pending' || b.status === 'approved';
-                        const actionHtml = showCancel 
-                            ? `<button class="btn btn-sm btn-ghost" style="color:#ff8a85" onclick="cancelBooking(${b.id})">Cancel</button>` 
-                            : '—';
-                        return `
-                            <tr>
-                                <td><strong>${ClassReserve.escapeHtml(b.title)}</strong></td>
-                                <td><strong>${ClassReserve.escapeHtml(b.room_name)}</strong></td>
-                                <td>${timeStr}</td>
-                                <td>${ClassReserve.escapeHtml(b.purpose || '—')}</td>
-                                <td>${b.attendees ?? '—'}</td>
-                                <td>${ClassReserve.statusBadge(b.status)}</td>
-                                <td>${actionHtml}</td>
-                            </tr>
-                        `;
-                    }).join('');
-                }
-
-                // Approved Events
-                const approvedEl = document.getElementById('approved-events-body');
-                if (!data.approved_bookings || data.approved_bookings.length === 0) {
-                    approvedEl.innerHTML = '<tr><td colspan="5" class="empty-state">No approved academic events scheduled</td></tr>';
-                } else {
-                    approvedEl.innerHTML = data.approved_bookings.map(b => {
-                        const priorityClass = b.priority == 3 ? 'role-faculty' : (b.priority == 2 ? 'role-club' : 'role-student');
-                        const priorityText = b.priority == 3 ? 'Faculty' : (b.priority == 2 ? 'Club' : 'Student');
-                        const timeStr = `${ClassReserve.formatDate(b.start_datetime)}<br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.formatTime(b.start_datetime)} — ${ClassReserve.formatTime(b.end_datetime)}</span>`;
-                        return `
-                            <tr>
-                                <td><strong>${ClassReserve.escapeHtml(b.title)}</strong></td>
-                                <td><strong>${ClassReserve.escapeHtml(b.user_name)}</strong><br><span class="role-badge ${priorityClass}">${priorityText}</span></td>
-                                <td><strong>${ClassReserve.escapeHtml(b.room_name)}</strong><br><span style="font-size:0.75rem;color:var(--cr-slate)">${ClassReserve.escapeHtml(b.building)}</span></td>
-                                <td>${timeStr}</td>
-                                <td>${ClassReserve.escapeHtml(b.purpose || '—')}</td>
-                            </tr>
-                        `;
-                    }).join('');
-                }
-
-                // Notifications
                 const notifEl = document.getElementById('recent-notifications');
-                if (data.recent_notifications.length === 0) {
+                const notifications = data.recent_notifications || [];
+                if (notifications.length === 0) {
                     notifEl.innerHTML = '<li class="empty-state">No notifications</li>';
                 } else {
-                    notifEl.innerHTML = data.recent_notifications.map(n => `
+                    notifEl.innerHTML = notifications.map(n => `
                         <li class="activity-item">
                             <span class="activity-dot dot-${n.type === 'success' ? 'success' : n.type === 'pending' ? 'pending' : n.type === 'error' ? 'error' : 'info'}"></span>
                             <div>
@@ -387,6 +309,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                 lucide.createIcons();
             } catch (err) {
+                document.getElementById('today-schedule-body').innerHTML = emptyRow(3, 'Could not load dashboard data');
+                document.getElementById('upcoming-bookings-body').innerHTML = emptyRow(4, 'Could not load dashboard data');
+                document.getElementById('pending-requests-body').innerHTML = emptyRow(5, 'Could not load dashboard data');
                 console.error(err);
             }
         }
