@@ -403,3 +403,7 @@ switch ($action) {
 
         jsonResponse(['bookings' => $stmt->fetchAll()]);
         break;
+
+    default:
+        jsonError('Unknown action', 404);
+}

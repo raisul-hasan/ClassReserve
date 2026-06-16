@@ -10,7 +10,10 @@ const ClassReserve = {
             headers['X-CSRF-Token'] = this.csrfToken;
         }
         const res = await fetch(endpoint, { credentials: 'same-origin', ...options, headers });
-        const data = await res.json();
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await res.json()
+            : { error: (await res.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || 'Request failed' };
         if (!res.ok) throw new Error(data.error || 'Request failed');
         return data;
     },
