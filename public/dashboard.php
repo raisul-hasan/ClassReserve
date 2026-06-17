@@ -2,15 +2,118 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 requireLogin();
 
-$pageTitle = 'Dashboard';
 $user = currentUser();
+
+if ($user['role'] === 'admin') {
+    header('Location: /public/admin.php');
+    exit;
+}
+
+$pageTitle = 'Dashboard';
 ob_start();
 ?>
 <div class="page-header">
-    <h1>Dashboard</h1>
-    <p>Welcome back, <?= sanitize($user['name']) ?> - <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php if ($user['role'] === 'faculty'): ?>
+        <h1>Faculty Dashboard</h1>
+        <p><span id="faculty-name"><?= sanitize($user['name']) ?></span> - <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php else: ?>
+        <h1>Dashboard</h1>
+        <p>Welcome back, <?= sanitize($user['name']) ?> - <?= sanitize(rolePortal($user['role'])) ?></p>
+    <?php endif; ?>
 </div>
 
+<?php if ($user['role'] === 'faculty'): ?>
+<div class="stat-grid" id="stat-grid">
+    <div class="stat-card stat-rooms">
+        <div class="stat-icon"><i data-lucide="door-open"></i></div>
+        <div class="stat-label">Available Rooms Today</div>
+        <div class="stat-value" id="stat-rooms">-</div>
+    </div>
+    <div class="stat-card stat-notices">
+        <div class="stat-icon"><i data-lucide="calendar-clock"></i></div>
+        <div class="stat-label">Today's Schedule</div>
+        <div class="stat-value" id="stat-today">-</div>
+    </div>
+    <div class="stat-card stat-bookings">
+        <div class="stat-icon"><i data-lucide="calendar"></i></div>
+        <div class="stat-label">Upcoming Bookings</div>
+        <div class="stat-value" id="stat-bookings">-</div>
+    </div>
+    <div class="stat-card stat-pending">
+        <div class="stat-icon"><i data-lucide="inbox"></i></div>
+        <div class="stat-label">Pending Requests</div>
+        <div class="stat-value" id="stat-pending">-</div>
+    </div>
+</div>
+
+<div class="card" style="margin-bottom:24px">
+    <h3 class="card-title"><i data-lucide="zap"></i> Quick Actions</h3>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <a href="/faculty/rooms.php" class="btn btn-primary"><i data-lucide="search"></i> Search Available Room</a>
+        <a href="/faculty/reserve.php" class="btn btn-primary"><i data-lucide="calendar-plus"></i> Create Booking</a>
+        <a href="/faculty/reservations.php" class="btn btn-secondary"><i data-lucide="list"></i> My Bookings</a>
+        <a href="/faculty/approvals.php" class="btn btn-secondary"><i data-lucide="check-square"></i> Review Requests</a>
+        <a href="/faculty/calendar.php" class="btn btn-secondary"><i data-lucide="calendar"></i> Calendar</a>
+    </div>
+</div>
+
+<div class="split-grid">
+    <div class="card" style="flex:2">
+        <div class="auth-tabs" id="dashboard-tabs" style="margin-bottom:20px">
+            <button class="auth-tab active" data-target="tab-today">Today's Schedule (<span id="count-today">0</span>)</button>
+            <button class="auth-tab" data-target="tab-upcoming">Upcoming Bookings (<span id="count-upcoming">0</span>)</button>
+            <button class="auth-tab" data-target="tab-pending">Pending Requests (<span id="count-pending">0</span>)</button>
+        </div>
+
+        <div class="tab-panel active" id="tab-today">
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead>
+                        <tr><th>Event</th><th>Room</th><th>Time</th></tr>
+                    </thead>
+                    <tbody id="today-schedule-body">
+                        <tr><td colspan="3"><div class="spinner"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel hidden" id="tab-upcoming">
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead>
+                        <tr><th>Event</th><th>Room</th><th>Date & Time</th><th>Status</th></tr>
+                    </thead>
+                    <tbody id="upcoming-bookings-body">
+                        <tr><td colspan="4"><div class="spinner"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="tab-panel hidden" id="tab-pending">
+            <div style="overflow-x:auto">
+                <table class="data-table">
+                    <thead>
+                        <tr><th>Requester</th><th>Room</th><th>Event</th><th>Requested Time</th><th>Priority</th></tr>
+                    </thead>
+                    <tbody id="pending-requests-body">
+                        <tr><td colspan="5"><div class="spinner"></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="flex:1">
+        <h3 class="card-title"><i data-lucide="bell-ring"></i> Notifications</h3>
+        <ul class="activity-list" id="recent-notifications">
+            <li class="activity-item"><div class="spinner"></div></li>
+        </ul>
+    </div>
+</div>
+
+<?php else: ?>
 <div class="stat-grid" id="stat-grid">
     <div class="stat-card stat-rooms">
         <div class="stat-icon"><i data-lucide="door-open"></i></div>
@@ -117,8 +220,10 @@ ob_start();
     <a href="/public/calendar.php" class="btn btn-secondary"><i data-lucide="calendar"></i> View Calendar</a>
     <a href="/public/forum.php" class="btn btn-secondary"><i data-lucide="messages-square"></i> Forum</a>
 </div>
+<?php endif; ?>
 
 <script>
+const userRole = '<?= sanitize($user['role']) ?>';
 const statusStep = { pending: 2, approved: 3, completed: 4, rejected: 2, cancelled: 2 };
 
 function statusClass(status) {
@@ -246,7 +351,7 @@ function renderUpcoming(bookings) {
 }
 
 function renderNotifications(notifications) {
-    const target = document.getElementById('dashboard-notifications');
+    const target = document.getElementById('dashboard-notifications') || document.getElementById('recent-notifications');
     if (!notifications.length) {
         target.innerHTML = '<li class="empty-state">No notifications</li>';
         return;
@@ -337,7 +442,110 @@ async function loadDashboard() {
     renderNotifications(data.recent_notifications || []);
 }
 
+function emptyRow(cols, message) {
+    return `<tr><td colspan="${cols}" class="empty-state">${message}</td></tr>`;
+}
+
+function roomText(booking) {
+    const room = ClassReserve.escapeHtml(booking.room_name || 'Room');
+    const building = ClassReserve.escapeHtml(booking.building || '');
+    return `<strong>${room}</strong>${building ? `<br><span class="muted-text">${building}</span>` : ''}`;
+}
+
+function timeRange(booking) {
+    return `${ClassReserve.formatTime(booking.start_datetime)} - ${ClassReserve.formatTime(booking.end_datetime)}`;
+}
+
+function dateTimeRange(booking) {
+    return `${ClassReserve.formatDate(booking.start_datetime)}<br><span class="muted-text">${timeRange(booking)}</span>`;
+}
+
+function roleLabel(role) {
+    return role === 'club' ? 'Club' : (role === 'faculty' ? 'Faculty' : 'Student');
+}
+
+function roleClass(role) {
+    if (role === 'club') return 'role-club';
+    if (role === 'faculty') return 'role-faculty';
+    return 'role-student';
+}
+
+async function loadFacultyDashboard() {
+    try {
+        const data = await ClassReserve.api('/api/dashboard.php');
+        const s = data.stats || {};
+        const todaySchedule = data.today_schedule || [];
+        const upcomingBookings = data.upcoming_bookings || data.my_bookings || [];
+        const pendingRequests = data.pending_requests || [];
+
+        document.getElementById('stat-rooms').textContent = s.rooms ?? 0;
+        document.getElementById('stat-today').textContent = s.today ?? todaySchedule.length;
+        document.getElementById('stat-bookings').textContent = s.bookings ?? 0;
+        document.getElementById('stat-pending').textContent = s.pending ?? 0;
+
+        document.getElementById('count-today').textContent = todaySchedule.length;
+        document.getElementById('count-upcoming').textContent = upcomingBookings.length;
+        document.getElementById('count-pending').textContent = pendingRequests.length;
+
+        const todayEl = document.getElementById('today-schedule-body');
+        todayEl.innerHTML = todaySchedule.length === 0
+            ? emptyRow(3, 'No faculty bookings scheduled today')
+            : todaySchedule.map(b => `
+                <tr>
+                    <td><strong>${ClassReserve.escapeHtml(b.title || 'Booking')}</strong><br><span class="muted-text">${ClassReserve.escapeHtml(b.description || '')}</span></td>
+                    <td>${roomText(b)}</td>
+                    <td>${timeRange(b)}<br>${ClassReserve.statusBadge(b.status)}</td>
+                </tr>
+            `).join('');
+
+        const upcomingEl = document.getElementById('upcoming-bookings-body');
+        upcomingEl.innerHTML = upcomingBookings.length === 0
+            ? emptyRow(4, 'No upcoming faculty bookings')
+            : upcomingBookings.map(b => `
+                <tr>
+                    <td><strong>${ClassReserve.escapeHtml(b.title || 'Booking')}</strong><br><span class="muted-text">${ClassReserve.escapeHtml(b.description || '')}</span></td>
+                    <td>${roomText(b)}</td>
+                    <td>${dateTimeRange(b)}</td>
+                    <td>${ClassReserve.statusBadge(b.status)}</td>
+                </tr>
+            `).join('');
+
+        const pendingEl = document.getElementById('pending-requests-body');
+        pendingEl.innerHTML = pendingRequests.length === 0
+            ? emptyRow(5, 'No pending student or club requests')
+            : pendingRequests.map(b => `
+                <tr>
+                    <td><strong>${ClassReserve.escapeHtml(b.user_name || '')}</strong><br><span class="role-badge ${roleClass(b.user_role)}">${roleLabel(b.user_role)}</span></td>
+                    <td>${roomText(b)}</td>
+                    <td><strong>${ClassReserve.escapeHtml(b.title || 'Booking')}</strong></td>
+                    <td>${dateTimeRange(b)}</td>
+                    <td><span class="role-badge ${roleClass(b.user_role)}">Tier ${ClassReserve.escapeHtml(String(b.priority || ''))}</span></td>
+                </tr>
+            `).join('');
+
+        renderNotifications(data.recent_notifications || []);
+        lucide.createIcons();
+    } catch (err) {
+        document.getElementById('today-schedule-body').innerHTML = emptyRow(3, 'Could not load dashboard data');
+        document.getElementById('upcoming-bookings-body').innerHTML = emptyRow(4, 'Could not load dashboard data');
+        document.getElementById('pending-requests-body').innerHTML = emptyRow(5, 'Could not load dashboard data');
+        console.error(err);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+    if (userRole === 'faculty') {
+        const tabButtons = document.querySelectorAll('#dashboard-tabs .auth-tab');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        const showTab = target => {
+            tabButtons.forEach(tab => tab.classList.toggle('active', tab.dataset.target === target));
+            tabPanels.forEach(panel => panel.classList.toggle('hidden', panel.id !== target));
+        };
+        tabButtons.forEach(tab => tab.addEventListener('click', () => showTab(tab.dataset.target)));
+        await loadFacultyDashboard();
+        return;
+    }
+
     const today = new Date().toISOString().split('T')[0];
     document.getElementById('dash-search-date').min = today;
     document.getElementById('dash-search-date').value = today;

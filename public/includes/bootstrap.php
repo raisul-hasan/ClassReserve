@@ -44,6 +44,18 @@ function requireLogin(): void
     }
 }
 
+function requireUserRole(array $roles): array
+{
+    requireLogin();
+    $user = currentUser();
+    if (!$user || !in_array($user['role'], $roles, true)) {
+        header('Location: ' . getBaseUrl() . '/public/dashboard.php');
+        exit;
+    }
+
+    return $user;
+}
+
 function currentUser(): ?array
 {
     return $_SESSION['user'] ?? null;
@@ -118,14 +130,23 @@ function navItems(string $role): array
         ];
     }
 
-    $common = [
-        ['href' => '/public/dashboard.php', 'icon' => 'layout-dashboard', 'label' => 'Dashboard'],
-        ['href' => '/public/new-booking.php', 'icon' => 'calendar-plus', 'label' => 'New Booking'],
-        ['href' => '/public/calendar.php', 'icon' => 'calendar', 'label' => 'Calendar'],
-        ['href' => '/public/forum.php', 'icon' => 'messages-square', 'label' => 'Forum'],
-    ];
+    if ($role === 'faculty') {
+        return [
+            ['href' => '/public/dashboard.php', 'icon' => 'layout-dashboard', 'label' => 'Dashboard'],
+            ['href' => '/faculty/rooms.php', 'icon' => 'door-open', 'label' => 'Rooms', 'matches' => ['/faculty/rooms', '/faculty/recommendations.php', '/faculty/favorite-rooms.php', '/faculty/room-usage.php']],
+            ['href' => '/faculty/reservations.php', 'icon' => 'clipboard-list', 'label' => 'Reservations', 'matches' => ['/faculty/reservations', '/faculty/reserve.php', '/faculty/my-reservations.php', '/faculty/schedule.php', '/faculty/print-schedule.php', '/faculty/booking-history.php']],
+            ['href' => '/faculty/approvals.php', 'icon' => 'check-square', 'label' => 'Approvals', 'matches' => ['/faculty/approvals', '/faculty/approval-history.php']],
+            ['href' => '/faculty/calendar.php', 'icon' => 'calendar', 'label' => 'Calendar'],
+            ['href' => '/faculty/reports.php', 'icon' => 'bar-chart-3', 'label' => 'Reports', 'matches' => ['/faculty/reports', '/faculty/monthly-report.php']],
+            ['href' => '/faculty/forum.php', 'icon' => 'messages-square', 'label' => 'Classroom Forum'],
+            ['href' => '/faculty/notifications.php', 'icon' => 'bell', 'label' => 'Notifications'],
+            ['href' => '/faculty/profile.php', 'icon' => 'user', 'label' => 'Profile', 'matches' => ['/faculty/profile', '/faculty/settings.php']],
+        ];
+    }
 
-    return $common;
+    return [
+        ['href' => '/public/dashboard.php', 'icon' => 'layout-dashboard', 'label' => 'Dashboard'],
+    ];
 }
 
 function getBaseUrl(): string

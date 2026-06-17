@@ -89,9 +89,9 @@ function logoutUser(): void
 function redirectByRole(string $role): void
 {
     $map = [
-        'student' => '/student/dashboard.php',
-        'club'    => '/student/dashboard.php',
-        'faculty' => '/faculty/dashboard.php',
+        'student' => '/public/dashboard.php',
+        'club'    => '/public/dashboard.php',
+        'faculty' => '/public/dashboard.php',
         'admin'   => '/admin/dashboard.php',
     ];
     header('Location: ' . ($map[$role] ?? '/login.php'));

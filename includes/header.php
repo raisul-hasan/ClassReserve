@@ -19,11 +19,11 @@ $pageTitle = $pageTitle ?? 'Classroom Availability';
         <?php if ($user): ?>
         <ul class="nav-links">
             <?php if (in_array($user['role'], ['student', 'club'], true)): ?>
-                <li><a href="/student/dashboard.php">Dashboard</a></li>
+                <li><a href="/public/dashboard.php">Dashboard</a></li>
                 <li><a href="/student/search.php">Search Rooms</a></li>
                 <li><a href="/student/bookings.php">My Bookings</a></li>
             <?php elseif ($user['role'] === 'faculty'): ?>
-                <li><a href="/faculty/dashboard.php">Dashboard</a></li>
+                <li><a href="/public/dashboard.php">Dashboard</a></li>
                 <li><a href="/faculty/reserve.php">Reserve Room</a></li>
                 <li><a href="/faculty/approvals.php">Approvals</a></li>
             <?php elseif ($user['role'] === 'admin'): ?>
