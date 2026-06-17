@@ -1,5 +1,6 @@
 <?php
 
+<<<<<<< HEAD
 if (session_status() === PHP_SESSION_NONE) {
     $savePath = session_save_path();
     if (empty($savePath) || strpos($savePath, 'Program Files') !== false || !is_writable($savePath)) {
@@ -7,6 +8,9 @@ if (session_status() === PHP_SESSION_NONE) {
     }
     session_start();
 }
+=======
+session_start();
+>>>>>>> origin/Riche01
 
 require_once __DIR__ . '/db.php';
 
@@ -128,6 +132,7 @@ function formatDateTime(string $dt): string
     return date('M j, Y g:i A', strtotime($dt));
 }
 
+<<<<<<< HEAD
 function normalizeDateTimeForDatabase(string $value): ?string
 {
     $timestamp = strtotime($value);
@@ -138,6 +143,8 @@ function normalizeDateTimeForDatabase(string $value): ?string
     return date('Y-m-d H:i:s', $timestamp);
 }
 
+=======
+>>>>>>> origin/Riche01
 function timesOverlap(string $start1, string $end1, string $start2, string $end2): bool
 {
     return $start1 < $end2 && $end1 > $start2;
@@ -156,6 +163,7 @@ function checkRoomAvailability(
 ): array {
     $db = getDb();
     $conflicts = [];
+<<<<<<< HEAD
     $normalizedStart = normalizeDateTimeForDatabase($startTime);
     $normalizedEnd = normalizeDateTimeForDatabase($endTime);
 
@@ -167,12 +175,18 @@ function checkRoomAvailability(
             ]],
         ];
     }
+=======
+>>>>>>> origin/Riche01
 
     $stmt = $db->prepare(
         'SELECT * FROM maintenance_blocks
          WHERE room_id = ? AND start_time < ? AND end_time > ?'
     );
+<<<<<<< HEAD
     $stmt->execute([$roomId, $normalizedEnd, $normalizedStart]);
+=======
+    $stmt->execute([$roomId, $endTime, $startTime]);
+>>>>>>> origin/Riche01
     foreach ($stmt->fetchAll() as $block) {
         $conflicts[] = [
             'type'   => 'maintenance',
@@ -188,7 +202,11 @@ function checkRoomAvailability(
             WHERE b.room_id = ?
               AND b.status IN ("approved", "pending")
               AND b.start_time < ? AND b.end_time > ?';
+<<<<<<< HEAD
     $params = [$roomId, $normalizedEnd, $normalizedStart];
+=======
+    $params = [$roomId, $endTime, $startTime];
+>>>>>>> origin/Riche01
 
     if ($excludeBookingId) {
         $sql .= ' AND b.id != ?';
@@ -199,6 +217,7 @@ function checkRoomAvailability(
     $stmt->execute($params);
 
     foreach ($stmt->fetchAll() as $booking) {
+<<<<<<< HEAD
         $conflicts[] = [
             'type'     => 'booking',
             'id'       => $booking['id'],
@@ -210,6 +229,21 @@ function checkRoomAvailability(
             'start'    => $booking['start_time'],
             'end'      => $booking['end_time'],
         ];
+=======
+        if ((int) $booking['priority'] >= $requestPriority) {
+            $conflicts[] = [
+                'type'     => 'booking',
+                'id'       => $booking['id'],
+                'title'    => $booking['title'],
+                'user'     => $booking['user_name'],
+                'role'     => $booking['user_role'],
+                'priority' => $booking['priority'],
+                'status'   => $booking['status'],
+                'start'    => $booking['start_time'],
+                'end'      => $booking['end_time'],
+            ];
+        }
+>>>>>>> origin/Riche01
     }
 
     return [
@@ -225,6 +259,7 @@ function searchAvailableRooms(
     int $requestPriority
 ): array {
     $db = getDb();
+<<<<<<< HEAD
     $normalizedStart = normalizeDateTimeForDatabase($startTime);
     $normalizedEnd = normalizeDateTimeForDatabase($endTime);
 
@@ -232,6 +267,8 @@ function searchAvailableRooms(
         return [];
     }
 
+=======
+>>>>>>> origin/Riche01
     $stmt = $db->prepare(
         'SELECT * FROM rooms WHERE status = "available" AND capacity >= ? ORDER BY capacity, name'
     );
@@ -240,7 +277,11 @@ function searchAvailableRooms(
     $available = [];
 
     foreach ($rooms as $room) {
+<<<<<<< HEAD
         $check = checkRoomAvailability((int) $room['id'], $normalizedStart, $normalizedEnd, $requestPriority);
+=======
+        $check = checkRoomAvailability((int) $room['id'], $startTime, $endTime, $requestPriority);
+>>>>>>> origin/Riche01
         if ($check['available']) {
             $room['conflicts'] = [];
             $available[] = $room;

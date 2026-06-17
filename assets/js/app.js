@@ -1,6 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+<<<<<<< HEAD
     initThemeSwitch();
 
+=======
+>>>>>>> origin/Riche01
     // Auto-hide alerts after 5 seconds
     document.querySelectorAll('.alert').forEach(alert => {
         setTimeout(() => {
@@ -95,6 +98,7 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+<<<<<<< HEAD
 
 function initThemeSwitch() {
     const storageKey = 'classreserve.theme';
@@ -135,3 +139,5 @@ function initThemeSwitch() {
         });
     });
 }
+=======
+>>>>>>> origin/Riche01

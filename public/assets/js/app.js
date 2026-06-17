@@ -1,5 +1,9 @@
 const ClassReserve = {
     csrfToken: document.querySelector('meta[name="csrf-token"]')?.content || '',
+<<<<<<< HEAD
+=======
+    baseUrl: document.querySelector('meta[name="base-url"]')?.content || '',
+>>>>>>> origin/Riche01
     themeStorageKey: 'classreserve.theme',
 
     getStoredTheme() {
@@ -50,8 +54,17 @@ const ClassReserve = {
         if (this.csrfToken && options.method && options.method !== 'GET') {
             headers['X-CSRF-Token'] = this.csrfToken;
         }
+<<<<<<< HEAD
         const res = await fetch(endpoint, { credentials: 'same-origin', ...options, headers });
         const data = await res.json();
+=======
+        const url = this.baseUrl + endpoint;
+        const res = await fetch(url, { credentials: 'same-origin', ...options, headers });
+        const contentType = res.headers.get('content-type') || '';
+        const data = contentType.includes('application/json')
+            ? await res.json()
+            : { error: (await res.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() || 'Request failed' };
+>>>>>>> origin/Riche01
         if (!res.ok) throw new Error(data.error || 'Request failed');
         return data;
     },
@@ -77,7 +90,11 @@ const ClassReserve = {
             logoutBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
                 await this.api('/api/auth.php?action=logout', { method: 'POST' });
+<<<<<<< HEAD
                 window.location.href = '/public/login.php';
+=======
+                window.location.href = this.baseUrl + '/public/login.php';
+>>>>>>> origin/Riche01
             });
         }
     },
@@ -118,8 +135,14 @@ const ClassReserve = {
 
             list.innerHTML = notifications.map(n => {
                 const created = n.created_at ? `${this.formatDate(n.created_at)} ${this.formatTime(n.created_at)}` : '';
+<<<<<<< HEAD
                 return `
                     <button class="notification-item ${Number(n.is_read) ? '' : 'unread'}" type="button" data-id="${n.id}">
+=======
+                const link = n.link ? ` data-link="${this.escapeHtml(n.link)}"` : '';
+                return `
+                    <button class="notification-item ${Number(n.is_read) ? '' : 'unread'}" type="button" data-id="${n.id}"${link}>
+>>>>>>> origin/Riche01
                         <span class="notification-dot ${this.notificationDotClass(n.type)}"></span>
                         <span class="notification-body">
                             <span class="notification-title">
@@ -155,6 +178,12 @@ const ClassReserve = {
         if (!menu || !toggle || !panel || !list) return;
 
         this.loadNotifications();
+<<<<<<< HEAD
+=======
+        if (localStorage.getItem('classreserve.autoRefreshNotifications') !== '0') {
+            window.setInterval(() => this.loadNotifications(), 60000);
+        }
+>>>>>>> origin/Riche01
 
         toggle.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -175,6 +204,10 @@ const ClassReserve = {
             if (!item) return;
             const id = Number(item.dataset.id || 0);
             if (id && item.classList.contains('unread')) await this.markNotificationsRead(id);
+<<<<<<< HEAD
+=======
+            if (item.dataset.link) window.location.href = ClassReserve.baseUrl + item.dataset.link;
+>>>>>>> origin/Riche01
         });
 
         document.addEventListener('click', (e) => {

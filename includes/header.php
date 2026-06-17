@@ -9,6 +9,7 @@ $pageTitle = $pageTitle ?? 'Classroom Availability';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= sanitize($pageTitle) ?></title>
+<<<<<<< HEAD
     <script>
         (() => {
             try {
@@ -21,6 +22,8 @@ $pageTitle = $pageTitle ?? 'Classroom Availability';
             }
         })();
     </script>
+=======
+>>>>>>> origin/Riche01
     <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
@@ -45,12 +48,15 @@ $pageTitle = $pageTitle ?? 'Classroom Availability';
                 <li><a href="/admin/maintenance.php">Maintenance</a></li>
             <?php endif; ?>
             <li><a href="/calendar.php">Calendar</a></li>
+<<<<<<< HEAD
             <li>
                 <button class="theme-switch" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
                     <span class="theme-switch-track" aria-hidden="true"><span class="theme-switch-thumb"></span></span>
                     <span class="theme-switch-label">Light</span>
                 </button>
             </li>
+=======
+>>>>>>> origin/Riche01
             <li class="nav-user">
                 <span><?= sanitize($user['name']) ?> (<?= sanitize(roleLabel($user['role'])) ?>)</span>
                 <a href="/logout.php" class="btn btn-sm btn-outline">Logout</a>

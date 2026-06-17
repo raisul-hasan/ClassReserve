@@ -102,6 +102,28 @@ switch ($action) {
         $user = requireRole(['admin']);
         verifyCsrf();
         $id = (int)($_GET['id'] ?? 0);
+<<<<<<< HEAD
+=======
+        $force = isset($_GET['force']) && $_GET['force'] === 'true';
+
+        if (!$force) {
+            $stmt = getDb()->prepare("
+                SELECT COUNT(*) FROM bookings 
+                WHERE room_id = ? AND status = 'approved' AND end_datetime > NOW()
+            ");
+            $stmt->execute([$id]);
+            $activeCount = (int)$stmt->fetchColumn();
+
+            if ($activeCount > 0) {
+                jsonResponse([
+                    'success' => false,
+                    'warning' => 'active_bookings',
+                    'error' => "This room has {$activeCount} active approved booking(s). Deleting it will cancel all associated bookings. Do you still want to delete it?"
+                ], 409);
+            }
+        }
+
+>>>>>>> origin/Riche01
         $stmt = getDb()->prepare('DELETE FROM rooms WHERE id = ?');
         $stmt->execute([$id]);
         auditLog((int)$user['id'], 'delete_room', 'room', $id);

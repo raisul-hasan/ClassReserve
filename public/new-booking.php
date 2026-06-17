@@ -4,6 +4,7 @@ requireLogin();
 
 $pageTitle = 'New Booking';
 $user = currentUser();
+<<<<<<< HEAD
 $isFaculty = ($user['role'] ?? '') === 'faculty';
 $facultyClassTypes = [
     'Regular Class',
@@ -21,12 +22,19 @@ $facultyClassTypes = [
     'Consultation Hour',
     'Other',
 ];
+=======
+>>>>>>> origin/Riche01
 $priorityLabels = ['student' => 'Tier 1 — Student', 'club' => 'Tier 2 — Club', 'faculty' => 'Tier 3 — Faculty'];
 ob_start();
 ?>
 <div class="page-header">
+<<<<<<< HEAD
     <h1><?= $isFaculty ? 'Faculty Booking' : 'New Booking' ?></h1>
     <p><?= $isFaculty ? 'Reserve an available room for an academic or department activity' : 'Find a room and submit your reservation request' ?></p>
+=======
+    <h1>New Booking</h1>
+    <p>Find a room and submit your reservation request</p>
+>>>>>>> origin/Riche01
 </div>
 
 <div class="wizard-steps">
@@ -58,6 +66,7 @@ ob_start();
                 <label for="end-time">End Time</label>
                 <input type="time" id="end-time" class="form-input" value="11:00" required>
             </div>
+<<<<<<< HEAD
             <div class="form-group">
                 <label for="room-building">Building</label>
                 <select id="room-building" class="form-select">
@@ -78,6 +87,8 @@ ob_start();
                     <option value="Auditorium">Auditorium</option>
                 </select>
             </div>
+=======
+>>>>>>> origin/Riche01
         </div>
         <button class="btn btn-primary mt-4" id="search-rooms-btn" style="margin-top:16px">
             <i data-lucide="search"></i> Search Available Rooms
@@ -104,6 +115,7 @@ ob_start();
     <div class="card">
         <h3 class="card-title">Step 3: Booking Details</h3>
         <form id="booking-form">
+<<<<<<< HEAD
             <div id="booking-error" class="alert alert-error hidden"></div>
             <div id="selected-room-summary" class="alert alert-info hidden"></div>
             <div class="form-group">
@@ -153,6 +165,19 @@ ob_start();
             <div class="form-group">
                 <label for="attendees">Expected Attendees</label>
                 <input type="number" id="attendees" class="form-input" min="1" value="10" required>
+=======
+            <div class="form-group">
+                <label for="booking-title">Event Title</label>
+                <input type="text" id="booking-title" class="form-input" required placeholder="e.g. Study Group Session">
+            </div>
+            <div class="form-group">
+                <label for="booking-desc">Description</label>
+                <textarea id="booking-desc" class="form-textarea" placeholder="Describe your event..."></textarea>
+            </div>
+            <div class="form-group">
+                <label for="attendees">Expected Attendees</label>
+                <input type="number" id="attendees" class="form-input" min="1" value="10">
+>>>>>>> origin/Riche01
             </div>
             <div class="form-group">
                 <label>Supporting Document</label>
@@ -178,10 +203,22 @@ ob_start();
 <script>
 let selectedRoom = null;
 let searchParams = {};
+<<<<<<< HEAD
 const isFacultyBooking = <?= json_encode($isFaculty) ?>;
 
 document.getElementById('booking-date').min = new Date().toISOString().split('T')[0];
 document.getElementById('booking-date').value = new Date().toISOString().split('T')[0];
+=======
+const bookingPrefill = new URLSearchParams(window.location.search);
+
+document.getElementById('booking-date').min = new Date().toISOString().split('T')[0];
+document.getElementById('booking-date').value = bookingPrefill.get('date') || new Date().toISOString().split('T')[0];
+document.getElementById('start-time').value = bookingPrefill.get('start_time') || '09:00';
+document.getElementById('end-time').value = bookingPrefill.get('end_time') || '11:00';
+if (bookingPrefill.get('capacity')) {
+    document.getElementById('capacity-min').value = bookingPrefill.get('capacity');
+}
+>>>>>>> origin/Riche01
 
 ['capacity-min', 'capacity-max'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
@@ -198,6 +235,7 @@ function goToStep(n) {
     document.querySelectorAll('.wizard-panel').forEach((p, i) => p.classList.toggle('active', i + 1 === n));
 }
 
+<<<<<<< HEAD
 function getBookingDateTime(date, time) {
     return new Date(`${date}T${time}`);
 }
@@ -228,12 +266,42 @@ function updateSelectedRoomSummary() {
     attendees.max = selectedRoom.capacity;
     summary.textContent = `Selected room: ${selectedRoom.name}. Capacity: ${selectedRoom.capacity} participants.`;
     summary.classList.remove('hidden');
+=======
+async function loadPrefilledRoom() {
+    const roomId = bookingPrefill.get('room_id');
+    if (!roomId) return;
+
+    try {
+        const data = await ClassReserve.api('/api/rooms.php?action=get&id=' + encodeURIComponent(roomId));
+        const room = data.room;
+        selectedRoom = { id: room.id, name: room.name };
+        searchParams = {
+            date: document.getElementById('booking-date').value,
+            startTime: document.getElementById('start-time').value,
+            endTime: document.getElementById('end-time').value
+        };
+        document.getElementById('room-results').innerHTML = `
+            <div class="room-card selected" data-id="${room.id}" data-name="${ClassReserve.escapeHtml(room.name)}">
+                <span class="room-type-badge">${ClassReserve.escapeHtml(room.type)}</span>
+                <div class="room-name">${ClassReserve.escapeHtml(room.name)}</div>
+                <div class="room-meta">${ClassReserve.escapeHtml(room.building)} - Floor ${ClassReserve.escapeHtml(room.floor)}</div>
+                <div class="room-capacity"><i data-lucide="users"></i> ${ClassReserve.escapeHtml(room.capacity)} seats</div>
+            </div>
+        `;
+        document.getElementById('select-room-btn').disabled = false;
+        goToStep(3);
+        lucide.createIcons();
+    } catch (err) {
+        alert(err.message);
+    }
+>>>>>>> origin/Riche01
 }
 
 document.getElementById('search-rooms-btn').addEventListener('click', async () => {
     const date = document.getElementById('booking-date').value;
     const startTime = document.getElementById('start-time').value;
     const endTime = document.getElementById('end-time').value;
+<<<<<<< HEAD
     if (!date || !startTime || !endTime) { alert('Date, start time, and end time are required.'); return; }
     if (getBookingDateTime(date, endTime) <= getBookingDateTime(date, startTime)) {
         alert('Invalid time');
@@ -252,6 +320,15 @@ document.getElementById('search-rooms-btn').addEventListener('click', async () =
         max_capacity: document.getElementById('capacity-max').value,
         building: building,
         type: roomType
+=======
+    if (!date || !startTime || !endTime) { alert('Please fill all fields'); return; }
+
+    searchParams = { date, startTime, endTime };
+    const params = new URLSearchParams({
+        action: 'search', date, start_time: startTime, end_time: endTime,
+        min_capacity: document.getElementById('capacity-min').value,
+        max_capacity: document.getElementById('capacity-max').value
+>>>>>>> origin/Riche01
     });
 
     try {
@@ -261,11 +338,19 @@ document.getElementById('search-rooms-btn').addEventListener('click', async () =
             grid.innerHTML = '<div class="empty-state"><i data-lucide="door-closed"></i><p>No rooms available for these criteria</p></div>';
         } else {
             grid.innerHTML = data.rooms.map(r => `
+<<<<<<< HEAD
                 <div class="room-card" data-id="${r.id}" data-name="${ClassReserve.escapeHtml(r.name)}" data-capacity="${Number(r.capacity || 0)}">
                     <span class="room-type-badge">${ClassReserve.escapeHtml(r.type || 'Room')}</span>
                     <div class="room-name">${ClassReserve.escapeHtml(r.name)}</div>
                     <div class="room-meta">${ClassReserve.escapeHtml(r.building || '')} - Floor ${ClassReserve.escapeHtml(r.floor || '')}</div>
                     <div class="room-capacity"><i data-lucide="users"></i> ${Number(r.capacity || 0)} seats</div>
+=======
+                <div class="room-card" data-id="${r.id}" data-name="${r.name}">
+                    <span class="room-type-badge">${r.type}</span>
+                    <div class="room-name">${r.name}</div>
+                    <div class="room-meta">${r.building} · Floor ${r.floor}</div>
+                    <div class="room-capacity"><i data-lucide="users"></i> ${r.capacity} seats</div>
+>>>>>>> origin/Riche01
                 </div>
             `).join('');
             lucide.createIcons();
@@ -273,6 +358,7 @@ document.getElementById('search-rooms-btn').addEventListener('click', async () =
                 card.addEventListener('click', () => {
                     grid.querySelectorAll('.room-card').forEach(c => c.classList.remove('selected'));
                     card.classList.add('selected');
+<<<<<<< HEAD
                     selectedRoom = {
                         id: card.dataset.id,
                         name: card.dataset.name,
@@ -280,6 +366,10 @@ document.getElementById('search-rooms-btn').addEventListener('click', async () =
                     };
                     document.getElementById('select-room-btn').disabled = false;
                     updateSelectedRoomSummary();
+=======
+                    selectedRoom = { id: card.dataset.id, name: card.dataset.name };
+                    document.getElementById('select-room-btn').disabled = false;
+>>>>>>> origin/Riche01
                 });
             });
         }
@@ -291,6 +381,11 @@ document.getElementById('select-room-btn').addEventListener('click', () => {
     if (selectedRoom) goToStep(3);
 });
 
+<<<<<<< HEAD
+=======
+loadPrefilledRoom();
+
+>>>>>>> origin/Riche01
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 dropZone.addEventListener('click', () => fileInput.click());
@@ -308,6 +403,7 @@ fileInput.addEventListener('change', () => {
 
 document.getElementById('booking-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+<<<<<<< HEAD
     clearBookingError();
 
     const title = document.getElementById('booking-title').value.trim();
@@ -372,6 +468,14 @@ document.getElementById('booking-form').addEventListener('submit', async (e) => 
         fd.append('batch', academicDetails.batch);
         fd.append('department', academicDetails.department);
     }
+=======
+    const fd = new FormData();
+    fd.append('title', document.getElementById('booking-title').value);
+    fd.append('description', document.getElementById('booking-desc').value);
+    fd.append('room_id', selectedRoom.id);
+    fd.append('start_datetime', `${searchParams.date} ${searchParams.startTime}:00`);
+    fd.append('end_datetime', `${searchParams.date} ${searchParams.endTime}:00`);
+>>>>>>> origin/Riche01
     fd.append('csrf_token', ClassReserve.csrfToken);
     if (fileInput.files[0]) fd.append('attachment', fileInput.files[0]);
 
@@ -385,7 +489,11 @@ document.getElementById('booking-form').addEventListener('submit', async (e) => 
         if (!res.ok) throw new Error(data.error);
         const q = new URLSearchParams({
             id: data.booking_id,
+<<<<<<< HEAD
             title: title,
+=======
+            title: document.getElementById('booking-title').value,
+>>>>>>> origin/Riche01
             room: selectedRoom.name,
             date: searchParams.date,
             start: searchParams.startTime,
@@ -393,7 +501,11 @@ document.getElementById('booking-form').addEventListener('submit', async (e) => 
             code: data.checkin_code
         });
         window.location.href = '/public/booking-confirmation.php?' + q;
+<<<<<<< HEAD
     } catch (err) { showBookingError(err.message); }
+=======
+    } catch (err) { alert(err.message); }
+>>>>>>> origin/Riche01
 });
 </script>
 <?php

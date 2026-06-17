@@ -1,0 +1,43 @@
+[Wed Jun 17 02:48:12 2026] PHP 8.2.12 Development Server (http://127.0.0.1:8001) started
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60289 Accepted
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60289 [401]: GET /api/profile.php?action=me
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60289 Closing
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60291 Accepted
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60291 [200]: GET /public/login.php
+[Wed Jun 17 02:48:24 2026] 127.0.0.1:60291 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60296 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60296 [200]: POST /api/auth.php?action=login
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60296 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60298 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60298 [200]: GET /api/issues.php?action=list&category=Equipment&search=Projector
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60298 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60300 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60300 [200]: POST /api/issues.php?action=upvote
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60300 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60302 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60302 [201]: POST /api/issues.php?action=comment
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60302 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60304 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60304 [200]: PUT /api/profile.php?action=update
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60304 Closing
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60306 Accepted
+[Wed Jun 17 02:48:36 2026] 127.0.0.1:60306 [200]: GET /api/profile.php?action=me
+[Wed Jun 17 02:48:37 2026] 127.0.0.1:60306 Closing
+[Wed Jun 17 02:48:46 2026] 127.0.0.1:55322 Accepted
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55322 [200]: POST /api/auth.php?action=login
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55322 Closing
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55324 Accepted
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55324 [200]: PUT /api/profile.php?action=update
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55324 Closing
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55326 Accepted
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55326 [200]: GET /api/profile.php?action=me
+[Wed Jun 17 02:48:47 2026] 127.0.0.1:55326 Closing
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55072 Accepted
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55072 [200]: POST /api/auth.php?action=login
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55072 Closing
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55077 Accepted
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55077 [200]: GET /public/forum.php
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55077 Closing
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55078 Accepted
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55078 [200]: GET /public/profile.php
+[Wed Jun 17 02:49:00 2026] 127.0.0.1:55078 Closing

@@ -35,6 +35,7 @@ $pageTitle = 'Login';
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= sanitize($pageTitle) ?></title>
+<<<<<<< HEAD
     <script>
         (() => {
             try {
@@ -47,15 +48,20 @@ $pageTitle = 'Login';
             }
         })();
     </script>
+=======
+>>>>>>> origin/Riche01
     <link rel="stylesheet" href="/assets/css/style.css">
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-brand"><a href="/index.php">Classroom Availability</a></div>
+<<<<<<< HEAD
         <button class="theme-switch" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
             <span class="theme-switch-track" aria-hidden="true"><span class="theme-switch-thumb"></span></span>
             <span class="theme-switch-label">Light</span>
         </button>
+=======
+>>>>>>> origin/Riche01
     </nav>
     <div class="auth-wrapper">
         <div class="auth-card">
@@ -87,6 +93,9 @@ $pageTitle = 'Login';
             </div>
         </div>
     </div>
+<<<<<<< HEAD
     <script src="/assets/js/app.js"></script>
+=======
+>>>>>>> origin/Riche01
 </body>
 </html>

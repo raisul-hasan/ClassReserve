@@ -29,6 +29,7 @@ $hideNav = $hideNav ?? false;
             }
         })();
     </script>
+<<<<<<< HEAD
     <link rel="stylesheet" href="/public/assets/css/tailwind.css">
     <link rel="stylesheet" href="/public/assets/css/styles.css">
     <meta name="csrf-token" content="<?= sanitize(getCsrfToken()) ?>">
@@ -82,10 +83,66 @@ $hideNav = $hideNav ?? false;
 <main class="main-content">
     <?php if (!$hideNav && $user): ?>
         <div class="topbar">
+=======
+    <link rel="stylesheet" href="<?= getBaseUrl() ?>/public/assets/css/tailwind.css">
+    <link rel="stylesheet" href="<?= getBaseUrl() ?>/public/assets/css/styles.css">
+    <meta name="csrf-token" content="<?= sanitize(getCsrfToken()) ?>">
+    <meta name="base-url" content="<?= sanitize(getBaseUrl()) ?>">
+</head>
+<body class="<?= $hideNav ? 'no-nav' : 'has-nav' ?>">
+<?php if (!$hideNav && $user): ?>
+<div class="app-shell">
+    <aside id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="brand-mark">
+                <i data-lucide="school"></i>
+            </div>
+            <div class="brand-text">
+                <span class="brand-name">ClassReserve</span>
+                <span class="brand-portal"><?= sanitize(rolePortal($user['role'])) ?></span>
+            </div>
+            <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">
+                <i data-lucide="panel-left-close"></i>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav">
+            <?php foreach (navItems($user['role']) as $item): ?>
+                <?php 
+                $requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+                $active = (basename($requestPath) === basename($item['href'])) ? 'active' : ''; 
+                ?>
+                <a href="<?= getBaseUrl() . $item['href'] ?>" class="sidebar-link <?= $active ?>">
+                    <i data-lucide="<?= $item['icon'] ?>"></i>
+                    <span><?= sanitize($item['label']) ?></span>
+                </a>
+            <?php endforeach; ?>
+        </nav>
+
+        <div class="sidebar-footer">
+            <a href="#" id="logout-btn" class="nav-item logout">
+                <i data-lucide="log-out"></i>
+                <span>Sign Out</span>
+            </a>
+        </div>
+    </aside>
+
+    <div class="main-content-wrapper">
+        <header class="topbar">
+            <div class="topbar-search">
+                <input type="text" placeholder="Search rooms, bookings, or users..." disabled style="opacity: 0.6; cursor: not-allowed;">
+                <i data-lucide="search" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--cr-slate);"></i>
+            </div>
+            
+>>>>>>> origin/Riche01
             <button id="theme-toggle" class="theme-toggle" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
                 <i data-lucide="sun"></i>
                 <span>Light</span>
             </button>
+<<<<<<< HEAD
+=======
+            
+>>>>>>> origin/Riche01
             <div class="notification-menu">
                 <button id="notification-toggle" class="notification-toggle" type="button" aria-label="Open notifications" aria-expanded="false">
                     <i data-lucide="bell"></i>
@@ -104,6 +161,10 @@ $hideNav = $hideNav ?? false;
                     </div>
                 </div>
             </div>
+<<<<<<< HEAD
+=======
+            
+>>>>>>> origin/Riche01
             <div class="user-chip topbar-user-chip">
                 <div class="user-avatar"><?= strtoupper(substr($user['name'], 0, 1)) ?></div>
                 <div class="user-info">
@@ -111,12 +172,35 @@ $hideNav = $hideNav ?? false;
                     <span class="role-badge role-<?= sanitize($user['role']) ?>"><?= sanitize(roleLabel($user['role'])) ?></span>
                 </div>
             </div>
+<<<<<<< HEAD
         </div>
     <?php endif; ?>
     <?= $pageContent ?? '' ?>
 </main>
 
 <script src="/public/assets/js/app.js"></script>
+=======
+        </header>
+        
+        <main class="main-content">
+            <?= $pageContent ?? '' ?>
+        </main>
+    </div>
+</div>
+<?php else: ?>
+    <?php if ($hideNav || !$user): ?>
+    <button id="theme-toggle" class="theme-toggle theme-toggle-floating" type="button" data-theme-toggle aria-label="Switch theme" aria-live="polite">
+        <i data-lucide="sun"></i>
+        <span>Light</span>
+    </button>
+    <?php endif; ?>
+    <main class="main-content">
+        <?= $pageContent ?? '' ?>
+    </main>
+<?php endif; ?>
+
+<script src="<?= getBaseUrl() ?>/public/assets/js/app.js"></script>
+>>>>>>> origin/Riche01
 <script src="https://unpkg.com/lucide@latest"></script>
 <script>lucide.createIcons();</script>
 </body>

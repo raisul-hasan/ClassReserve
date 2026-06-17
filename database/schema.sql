@@ -35,11 +35,14 @@ CREATE TABLE bookings (
     room_id INT NOT NULL,
     user_id INT NOT NULL,
     title VARCHAR(200) NOT NULL,
+<<<<<<< HEAD
     purpose VARCHAR(100) NOT NULL DEFAULT 'Other',
     course_code VARCHAR(50) NULL,
     section VARCHAR(50) NULL,
     batch VARCHAR(50) NULL,
     department VARCHAR(100) NULL,
+=======
+>>>>>>> origin/Riche01
     description TEXT NULL,
     start_time DATETIME NOT NULL,
     end_time DATETIME NOT NULL,

@@ -2,8 +2,12 @@
 require_once __DIR__ . '/includes/bootstrap.php';
 
 if (isLoggedIn()) {
+<<<<<<< HEAD
     $user = currentUser();
     header('Location: ' . (($user['role'] ?? '') === 'faculty' ? '/faculty' : '/public/dashboard.php'));
+=======
+    header('Location: ' . getBaseUrl() . '/public/dashboard.php');
+>>>>>>> origin/Riche01
     exit;
 }
 
@@ -122,7 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     role: selectedRole
                 })
             });
+<<<<<<< HEAD
             window.location.href = selectedRole === 'admin' ? '/public/admin.php' : (selectedRole === 'faculty' ? '/faculty' : '/public/dashboard.php');
+=======
+            window.location.href = ClassReserve.baseUrl + (selectedRole === 'admin' ? '/public/admin.php' : '/public/dashboard.php');
+>>>>>>> origin/Riche01
         } catch (err) {
             showAlert(err.message);
         }

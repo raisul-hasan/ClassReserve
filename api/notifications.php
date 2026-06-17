@@ -6,6 +6,7 @@ $method = $_SERVER['REQUEST_METHOD'];
 $action = $_GET['action'] ?? 'list';
 
 switch ($action) {
+<<<<<<< HEAD
     case 'list':
         $user = requireAuth();
         $unreadOnly = ($_GET['unread'] ?? '') === '1';
@@ -15,10 +16,36 @@ switch ($action) {
         $sql .= ' ORDER BY created_at DESC LIMIT 50';
 
         $stmt = getDb()->prepare($sql);
+=======
+    // ─── LIST ────────────────────────────────────────────────────────────────
+    case 'list':
+        $user = requireAuth();
+        $db = getDb();
+        $unreadOnly = ($_GET['unread'] ?? '') === '1';
+        $limit = max(1, min(100, (int)($_GET['limit'] ?? 50)));
+
+        $sql = 'SELECT * FROM notifications WHERE user_id = ?';
+        if ($unreadOnly) $sql .= ' AND is_read = 0';
+        $sql .= ' ORDER BY created_at DESC LIMIT ' . $limit;
+
+        $stmt = $db->prepare($sql);
+>>>>>>> origin/Riche01
         $stmt->execute([$user['id']]);
         jsonResponse(['notifications' => $stmt->fetchAll()]);
         break;
 
+<<<<<<< HEAD
+=======
+    // ─── COUNT ────────────────────────────────────────────────────────────────
+    case 'count':
+        $user = requireAuth();
+        $stmt = getDb()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0');
+        $stmt->execute([$user['id']]);
+        jsonResponse(['unread_count' => (int)$stmt->fetchColumn()]);
+        break;
+
+    // ─── MARK READ ────────────────────────────────────────────────────────────
+>>>>>>> origin/Riche01
     case 'mark_read':
         if ($method !== 'POST') jsonError('Method not allowed', 405);
         $user = requireAuth();
@@ -36,11 +63,33 @@ switch ($action) {
         jsonResponse(['success' => true]);
         break;
 
+<<<<<<< HEAD
     case 'count':
         $user = requireAuth();
         $stmt = getDb()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0');
         $stmt->execute([$user['id']]);
         jsonResponse(['unread_count' => (int)$stmt->fetchColumn()]);
+=======
+    // ─── DELETE SINGLE ────────────────────────────────────────────────────────
+    case 'delete':
+        if ($method !== 'DELETE') jsonError('Method not allowed', 405);
+        $user = requireAuth();
+        $id = (int)($_GET['id'] ?? 0);
+        if (!$id) jsonError('Notification ID is required');
+
+        $stmt = getDb()->prepare('DELETE FROM notifications WHERE id = ? AND user_id = ?');
+        $stmt->execute([$id, $user['id']]);
+        jsonResponse(['success' => true]);
+        break;
+
+    // ─── DELETE ALL READ ──────────────────────────────────────────────────────
+    case 'clear_read':
+        if ($method !== 'DELETE') jsonError('Method not allowed', 405);
+        $user = requireAuth();
+        $stmt = getDb()->prepare('DELETE FROM notifications WHERE user_id = ? AND is_read = 1');
+        $stmt->execute([$user['id']]);
+        jsonResponse(['success' => true, 'deleted' => $stmt->rowCount()]);
+>>>>>>> origin/Riche01
         break;
 
     default:

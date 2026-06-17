@@ -64,6 +64,7 @@ a:hover { text-decoration: underline; }
 .nav-links a:hover { color: var(--primary); }
 .nav-user { display: flex; align-items: center; gap: .75rem; font-size: .85rem; color: var(--muted); }
 
+<<<<<<< HEAD
 .theme-switch {
     display: inline-flex;
     align-items: center;
@@ -107,6 +108,8 @@ a:hover { text-decoration: underline; }
 
 :root[data-theme="light"] .theme-switch-thumb { transform: translateX(0); }
 
+=======
+>>>>>>> origin/Riche01
 /* Layout */
 .container {
     max-width: 1100px;
@@ -342,6 +345,7 @@ tr:hover td { background: #f1f5f9; }
 }
 .page-header h1 { font-size: 1.5rem; }
 
+<<<<<<< HEAD
 :root[data-theme="dark"] {
     --primary: #60a5fa;
     --primary-dark: #3b82f6;
@@ -409,6 +413,8 @@ tr:hover td { background: #f1f5f9; }
 :root[data-theme="dark"] .cal-event.approved { background: rgba(37, 99, 235, .22); color: #bfdbfe; }
 :root[data-theme="dark"] .cal-event.pending { background: rgba(217, 119, 6, .22); color: #fde68a; }
 
+=======
+>>>>>>> origin/Riche01
 @media (max-width: 640px) {
     .form-row { grid-template-columns: 1fr; }
     .nav-links { gap: .75rem; }
